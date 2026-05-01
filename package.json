@@ -16,7 +16,10 @@
     "import:clients": "tsx scripts/import-clients.ts"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^3.0.107",
     "@neondatabase/serverless": "^1.1.0",
+    "@vercel/blob": "^1.1.1",
+    "ai": "^6.0.172",
     "drizzle-orm": "^0.45.2",
     "iron-session": "^8.0.4",
     "next": "16.2.4",

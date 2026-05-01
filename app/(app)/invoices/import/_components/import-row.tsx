@@ -1,0 +1,187 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { setImportClient, materializeImport, deleteImport } from "../_actions";
+import { formatEur } from "@/lib/format";
+
+type ImportRecord = {
+  id: string;
+  pdfBlobUrl: string;
+  sourceFilename: string | null;
+  status: string;
+  errorMessage: string | null;
+  matchedClientId: string | null;
+  materializedInvoiceId: string | null;
+  extracted: {
+    legacyNumber?: string | null;
+    issueDate?: string | null;
+    clientGuess?: { name?: string | null; siret?: string | null } | null;
+    totals?: { totalHt?: number; totalVat?: number; totalTtc?: number } | null;
+    lines?: unknown[];
+  } | null;
+};
+
+type Client = { id: string; code: string; name: string };
+
+const STATUS_STYLES: Record<string, string> = {
+  pending: "bg-neutral-100 text-neutral-700",
+  extracted: "bg-blue-100 text-blue-700",
+  needs_review: "bg-amber-100 text-amber-700",
+  materialized: "bg-emerald-100 text-emerald-700",
+  failed: "bg-red-100 text-red-700",
+};
+
+export function ImportRow({
+  imp,
+  clients,
+}: {
+  imp: ImportRecord;
+  clients: Client[];
+}) {
+  const [clientId, setClientId] = useState(imp.matchedClientId ?? "");
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const ex = imp.extracted;
+  const total = ex?.totals?.totalTtc;
+  const linesCount = ex?.lines?.length ?? 0;
+
+  const canMaterialize =
+    imp.status !== "materialized" &&
+    imp.status !== "failed" &&
+    !!clientId &&
+    !!ex?.legacyNumber &&
+    !!ex?.issueDate;
+
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[imp.status] ?? "bg-neutral-100 text-neutral-700"}`}
+            >
+              {imp.status}
+            </span>
+            {ex?.legacyNumber ? (
+              <span className="font-mono text-sm">{ex.legacyNumber}</span>
+            ) : null}
+            {ex?.issueDate ? (
+              <span className="text-xs text-neutral-500">{ex.issueDate}</span>
+            ) : null}
+          </div>
+          <p className="mt-1 truncate text-xs text-neutral-500">
+            {imp.sourceFilename ?? "—"}
+          </p>
+        </div>
+
+        <div className="text-right text-sm tabular-nums">
+          {total != null ? (
+            <div className="font-medium">{formatEur(total)}</div>
+          ) : null}
+          {linesCount > 0 ? (
+            <div className="text-xs text-neutral-500">
+              {linesCount} ligne{linesCount > 1 ? "s" : ""}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {imp.errorMessage ? (
+        <p className="mt-2 text-xs text-red-600">{imp.errorMessage}</p>
+      ) : null}
+
+      {ex?.clientGuess?.name || ex?.clientGuess?.siret ? (
+        <p className="mt-2 text-xs text-neutral-500">
+          Client détecté :{" "}
+          <span className="text-neutral-700">
+            {ex.clientGuess.name ?? "?"}
+            {ex.clientGuess.siret ? ` — SIRET ${ex.clientGuess.siret}` : ""}
+          </span>
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <select
+          value={clientId}
+          onChange={(e) => {
+            const v = e.target.value;
+            setClientId(v);
+            if (v && v !== imp.matchedClientId) {
+              startTransition(async () => {
+                try {
+                  await setImportClient({ importId: imp.id, clientId: v });
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : String(err));
+                }
+              });
+            }
+          }}
+          disabled={imp.status === "materialized" || isPending}
+          className="input max-w-xs"
+        >
+          <option value="">— matcher un client —</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.code} — {c.name}
+            </option>
+          ))}
+        </select>
+
+        <a
+          href={imp.pdfBlobUrl}
+          target="_blank"
+          rel="noopener"
+          className="text-xs text-neutral-600 underline hover:text-neutral-900"
+        >
+          Voir le PDF
+        </a>
+
+        <div className="ml-auto flex items-center gap-2">
+          {imp.status === "materialized" ? (
+            <span className="text-xs text-emerald-700">✓ matérialisé</span>
+          ) : (
+            <button
+              type="button"
+              disabled={!canMaterialize || isPending}
+              onClick={() => {
+                setError(null);
+                startTransition(async () => {
+                  try {
+                    await materializeImport(imp.id);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err));
+                  }
+                });
+              }}
+              className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+            >
+              {isPending ? "…" : "Matérialiser"}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => {
+              if (!confirm("Supprimer cet import ?")) return;
+              setError(null);
+              startTransition(async () => {
+                try {
+                  await deleteImport(imp.id);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : String(err));
+                }
+              });
+            }}
+            className="text-xs text-neutral-400 hover:text-red-600"
+            aria-label="Supprimer"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}

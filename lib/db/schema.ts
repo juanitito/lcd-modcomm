@@ -382,6 +382,61 @@ export const journalLines = pgTable("journal_lines", {
 });
 
 // =====================================================================
+// IMPORT HISTORIQUE FACTURES (brouillons avant matérialisation)
+// =====================================================================
+
+export const invoiceImportStatus = pgEnum("invoice_import_status", [
+  "pending",      // upload OK, en attente d'extraction
+  "extracted",    // extraction LLM faite, prête à valider
+  "needs_review", // extraction incomplète ou client non matché
+  "materialized", // injectée dans `invoices`, on peut archiver l'import
+  "failed",
+]);
+
+export const invoiceImports = pgTable(
+  "invoice_imports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pdfBlobUrl: text("pdf_blob_url").notNull(),
+    pdfBlobPath: text("pdf_blob_path").notNull(),
+    sourceFilename: text("source_filename"),
+
+    status: invoiceImportStatus("status").notNull().default("pending"),
+    errorMessage: text("error_message"),
+
+    // données brutes renvoyées par l'extraction LLM (typé comme l'output Zod
+    // de invoiceExtractionSchema dans lib/invoice-extract.ts)
+    extracted: jsonb("extracted").$type<{
+      legacyNumber: string | null;
+      issueDate: string | null;
+      dueDate: string | null;
+      clientGuess: {
+        name: string | null;
+        siret: string | null;
+        address: string | null;
+      };
+      lines: Array<{
+        designation: string;
+        qty: number;
+        unitPriceHt: number;
+        vatRate: number;
+        lineTotalHt: number | null;
+      }>;
+      totals: { totalHt: number; totalVat: number; totalTtc: number };
+      vatBreakdown: Array<{ rate: number; base: number; vat: number }>;
+    }>(),
+
+    // matching après extraction (manuel ou auto par SIRET)
+    matchedClientId: uuid("matched_client_id").references(() => clients.id),
+    materializedInvoiceId: uuid("materialized_invoice_id").references(() => invoices.id),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("invoice_imports_status_idx").on(t.status)],
+);
+
+// =====================================================================
 // BANQUE — Qonto
 // =====================================================================
 
