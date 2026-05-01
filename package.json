@@ -13,7 +13,10 @@
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "db:seed": "tsx lib/db/seed.ts",
     "import:products": "tsx scripts/import-products.ts",
-    "import:clients": "tsx scripts/import-clients.ts"
+    "import:clients": "tsx scripts/import-clients.ts",
+    "qonto:dryrun": "tsx scripts/qonto-dryrun.ts",
+    "qonto:sync": "tsx scripts/qonto-sync.ts",
+    "db:stats": "tsx scripts/db-stats.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.107",
