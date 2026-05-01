@@ -90,8 +90,14 @@ export async function retryExtraction(importId: string) {
   const imp = await db.query.invoiceImports.findFirst({
     where: eq(schema.invoiceImports.id, id),
   });
-  if (!imp) throw new Error("Import introuvable.");
-  if (imp.status === "materialized") throw new Error("Déjà matérialisé.");
+  if (!imp) {
+    revalidatePath("/invoices/import");
+    return;
+  }
+  if (imp.status === "materialized") {
+    revalidatePath("/invoices/import");
+    return;
+  }
 
   try {
     const res = await fetch(imp.pdfBlobUrl);
@@ -119,7 +125,6 @@ export async function retryExtraction(importId: string) {
         updatedAt: new Date(),
       })
       .where(eq(schema.invoiceImports.id, id));
-    throw err;
   }
 
   revalidatePath("/invoices/import");
