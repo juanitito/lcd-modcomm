@@ -19,6 +19,7 @@ export default async function AppLayout({
               <Link href="/products" className="hover:text-neutral-900">Catalogue</Link>
               <Link href="/orders" className="hover:text-neutral-900">Commandes</Link>
               <Link href="/invoices" className="hover:text-neutral-900">Factures</Link>
+              <Link href="/banque" className="hover:text-neutral-900">Banque</Link>
               <Link href="/suppliers" className="hover:text-neutral-900">Fournisseurs</Link>
               <Link href="/accounting" className="hover:text-neutral-900">Compta</Link>
             </nav>
