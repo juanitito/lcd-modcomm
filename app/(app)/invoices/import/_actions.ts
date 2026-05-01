@@ -83,6 +83,48 @@ export async function uploadInvoicePdfs(formData: FormData) {
   revalidatePath("/invoices/import");
 }
 
+export async function retryExtraction(importId: string) {
+  await requireAuth();
+  const id = z.string().uuid().parse(importId);
+
+  const imp = await db.query.invoiceImports.findFirst({
+    where: eq(schema.invoiceImports.id, id),
+  });
+  if (!imp) throw new Error("Import introuvable.");
+  if (imp.status === "materialized") throw new Error("Déjà matérialisé.");
+
+  try {
+    const res = await fetch(imp.pdfBlobUrl);
+    if (!res.ok) throw new Error(`Lecture du PDF (Blob) : HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const extracted = await extractInvoice(buf);
+    const matchedClientId = await findClientByExtraction(extracted);
+
+    await db
+      .update(schema.invoiceImports)
+      .set({
+        extracted,
+        matchedClientId,
+        errorMessage: null,
+        status: matchedClientId ? "extracted" : "needs_review",
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.invoiceImports.id, id));
+  } catch (err) {
+    await db
+      .update(schema.invoiceImports)
+      .set({
+        status: "failed",
+        errorMessage: err instanceof Error ? err.message : String(err),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.invoiceImports.id, id));
+    throw err;
+  }
+
+  revalidatePath("/invoices/import");
+}
+
 const matchSchema = z.object({
   importId: z.string().uuid(),
   clientId: z.string().uuid(),

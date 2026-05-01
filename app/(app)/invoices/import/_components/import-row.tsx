@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { setImportClient, materializeImport, deleteImport } from "../_actions";
+import {
+  setImportClient,
+  materializeImport,
+  deleteImport,
+  retryExtraction,
+} from "../_actions";
 import { formatEur } from "@/lib/format";
 
 type ImportRecord = {
@@ -138,9 +143,28 @@ export function ImportRow({
         </a>
 
         <div className="ml-auto flex items-center gap-2">
+          {imp.status === "failed" ? (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setError(null);
+                startTransition(async () => {
+                  try {
+                    await retryExtraction(imp.id);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err));
+                  }
+                });
+              }}
+              className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs hover:border-neutral-500 disabled:opacity-50"
+            >
+              {isPending ? "…" : "Retenter l'extraction"}
+            </button>
+          ) : null}
           {imp.status === "materialized" ? (
             <span className="text-xs text-emerald-700">✓ matérialisé</span>
-          ) : (
+          ) : imp.status !== "failed" ? (
             <button
               type="button"
               disabled={!canMaterialize || isPending}
@@ -158,7 +182,7 @@ export function ImportRow({
             >
               {isPending ? "…" : "Matérialiser"}
             </button>
-          )}
+          ) : null}
           <button
             type="button"
             disabled={isPending}
