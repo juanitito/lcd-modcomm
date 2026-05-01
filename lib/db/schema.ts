@@ -56,6 +56,11 @@ export const journalEntryStatus = pgEnum("journal_entry_status", [
   "validated",
 ]);
 
+export const invoiceDirection = pgEnum("invoice_direction", [
+  "client",   // facture émise par nous au client (créance)
+  "supplier", // facture reçue d'un fournisseur (dette)
+]);
+
 // =====================================================================
 // REFERENCES
 // =====================================================================
@@ -303,7 +308,79 @@ export const invoiceLines = pgTable("invoice_lines", {
 });
 
 // =====================================================================
-// COMMANDES FOURNISSEURS
+// FACTURES FOURNISSEURS (factures reçues, dettes — entité légale immuable)
+// =====================================================================
+
+export const supplierInvoices = pgTable(
+  "supplier_invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    // Numéro émis par le fournisseur sur SA facture (référence externe)
+    supplierInvoiceNumber: varchar("supplier_invoice_number", { length: 64 }).notNull(),
+
+    type: invoiceType("type").notNull().default("invoice"),
+    supplierId: uuid("supplier_id").notNull().references(() => suppliers.id),
+
+    // snapshot identité fournisseur au moment de l'import
+    supplierSnapshot: jsonb("supplier_snapshot").$type<{
+      name: string;
+      legalName?: string;
+      siret?: string;
+      vatNumber?: string;
+      address?: string;
+    }>().notNull(),
+
+    issueDate: date("issue_date").notNull(),
+    dueDate: date("due_date"),
+    paymentTerms: text("payment_terms"),
+
+    totalHt: numeric("total_ht", { precision: 14, scale: 2 }).notNull(),
+    totalVat: numeric("total_vat", { precision: 14, scale: 2 }).notNull(),
+    totalTtc: numeric("total_ttc", { precision: 14, scale: 2 }).notNull(),
+
+    vatBreakdown: jsonb("vat_breakdown").$type<Array<{
+      rate: string;
+      base: string;
+      vat: string;
+    }>>().notNull(),
+
+    pdfBlobUrl: text("pdf_blob_url"),
+    pdfBlobPath: text("pdf_blob_path"),
+
+    status: invoiceStatus("status").notNull().default("issued"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    paidAmount: numeric("paid_amount", { precision: 14, scale: 2 }),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("supplier_invoices_supplier_number_idx").on(
+      t.supplierId,
+      t.supplierInvoiceNumber,
+    ),
+    index("supplier_invoices_supplier_idx").on(t.supplierId),
+    index("supplier_invoices_issue_date_idx").on(t.issueDate),
+  ],
+);
+
+export const supplierInvoiceLines = pgTable("supplier_invoice_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  supplierInvoiceId: uuid("supplier_invoice_id")
+    .notNull()
+    .references(() => supplierInvoices.id, { onDelete: "cascade" }),
+
+  designation: text("designation").notNull(),
+  qty: numeric("qty", { precision: 12, scale: 3 }).notNull(),
+  unitPriceHt: numeric("unit_price_ht", { precision: 12, scale: 4 }).notNull(),
+  vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),
+  lineTotalHt: numeric("line_total_ht", { precision: 14, scale: 2 }).notNull(),
+
+  position: integer("position").notNull().default(0),
+});
+
+// =====================================================================
+// COMMANDES FOURNISSEURS (POs sortants — pas encore utilisé)
 // =====================================================================
 
 export const supplierOrders = pgTable("supplier_orders", {
@@ -401,6 +478,7 @@ export const invoiceImports = pgTable(
     pdfBlobPath: text("pdf_blob_path").notNull(),
     sourceFilename: text("source_filename"),
 
+    direction: invoiceDirection("direction").notNull().default("client"),
     status: invoiceImportStatus("status").notNull().default("pending"),
     errorMessage: text("error_message"),
 
@@ -426,9 +504,11 @@ export const invoiceImports = pgTable(
       vatBreakdown: Array<{ rate: number; base: number; vat: number }>;
     }>(),
 
-    // matching après extraction (manuel ou auto par SIRET)
+    // matching après extraction (manuel ou auto par SIRET / nom)
     matchedClientId: uuid("matched_client_id").references(() => clients.id),
+    matchedSupplierId: uuid("matched_supplier_id").references(() => suppliers.id),
     materializedInvoiceId: uuid("materialized_invoice_id").references(() => invoices.id),
+    materializedSupplierInvoiceId: uuid("materialized_supplier_invoice_id").references(() => supplierInvoices.id),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -456,6 +536,7 @@ export const qontoTransactions = pgTable(
 
     // rapprochement
     matchedInvoiceId: uuid("matched_invoice_id").references(() => invoices.id),
+    matchedSupplierInvoiceId: uuid("matched_supplier_invoice_id").references(() => supplierInvoices.id),
     matchedSupplierOrderId: uuid("matched_supplier_order_id").references(() => supplierOrders.id),
     matchedAt: timestamp("matched_at", { withTimezone: true }),
     matchNote: text("match_note"),

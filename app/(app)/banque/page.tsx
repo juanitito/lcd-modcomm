@@ -20,12 +20,12 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
     matchFilter === "matched"
       ? or(
           isNotNull(schema.qontoTransactions.matchedInvoiceId),
-          isNotNull(schema.qontoTransactions.matchedSupplierOrderId),
+          isNotNull(schema.qontoTransactions.matchedSupplierInvoiceId),
         )
       : matchFilter === "unmatched"
         ? and(
             isNull(schema.qontoTransactions.matchedInvoiceId),
-            isNull(schema.qontoTransactions.matchedSupplierOrderId),
+            isNull(schema.qontoTransactions.matchedSupplierInvoiceId),
           )
         : undefined;
 
@@ -51,7 +51,7 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
       .where(
         or(
           isNotNull(schema.qontoTransactions.matchedInvoiceId),
-          isNotNull(schema.qontoTransactions.matchedSupplierOrderId),
+          isNotNull(schema.qontoTransactions.matchedSupplierInvoiceId),
         ),
       ),
     db
@@ -75,36 +75,63 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
       counterpartyName: schema.qontoTransactions.counterpartyName,
       qontoCategory: schema.qontoTransactions.qontoCategory,
       matchedInvoiceId: schema.qontoTransactions.matchedInvoiceId,
+      matchedSupplierInvoiceId: schema.qontoTransactions.matchedSupplierInvoiceId,
       matchedAt: schema.qontoTransactions.matchedAt,
       matchNote: schema.qontoTransactions.matchNote,
       matchedInvoiceNumber: schema.invoices.invoiceNumber,
       matchedInvoiceTotal: schema.invoices.totalTtc,
+      matchedSupplierInvoiceNumber: schema.supplierInvoices.supplierInvoiceNumber,
+      matchedSupplierInvoiceTotal: schema.supplierInvoices.totalTtc,
     })
     .from(schema.qontoTransactions)
     .leftJoin(
       schema.invoices,
       eq(schema.qontoTransactions.matchedInvoiceId, schema.invoices.id),
     )
+    .leftJoin(
+      schema.supplierInvoices,
+      eq(
+        schema.qontoTransactions.matchedSupplierInvoiceId,
+        schema.supplierInvoices.id,
+      ),
+    )
     .where(where)
     .orderBy(desc(schema.qontoTransactions.settledAt))
     .limit(PAGE_LIMIT);
 
-  // Liste des invoices pour le dropdown de matching manuel
-  const invoiceOptions = await db
-    .select({
-      id: schema.invoices.id,
-      invoiceNumber: schema.invoices.invoiceNumber,
-      totalTtc: schema.invoices.totalTtc,
-      issueDate: schema.invoices.issueDate,
-      clientSnapshot: schema.invoices.clientSnapshot,
-    })
-    .from(schema.invoices)
-    .where(eq(schema.invoices.status, "issued"))
-    .orderBy(asc(schema.invoices.invoiceNumber));
+  const [invoiceOptions, supplierInvoiceOptions] = await Promise.all([
+    db
+      .select({
+        id: schema.invoices.id,
+        invoiceNumber: schema.invoices.invoiceNumber,
+        totalTtc: schema.invoices.totalTtc,
+        issueDate: schema.invoices.issueDate,
+        clientSnapshot: schema.invoices.clientSnapshot,
+      })
+      .from(schema.invoices)
+      .where(eq(schema.invoices.status, "issued"))
+      .orderBy(asc(schema.invoices.invoiceNumber)),
+    db
+      .select({
+        id: schema.supplierInvoices.id,
+        supplierInvoiceNumber: schema.supplierInvoices.supplierInvoiceNumber,
+        totalTtc: schema.supplierInvoices.totalTtc,
+        issueDate: schema.supplierInvoices.issueDate,
+        supplierSnapshot: schema.supplierInvoices.supplierSnapshot,
+      })
+      .from(schema.supplierInvoices)
+      .where(eq(schema.supplierInvoices.status, "issued"))
+      .orderBy(asc(schema.supplierInvoices.issueDate)),
+  ]);
 
   const invoiceOptionsForUI = invoiceOptions.map((inv) => ({
     id: inv.id,
     label: `${inv.invoiceNumber} — ${inv.clientSnapshot?.name ?? "?"} — ${Number(inv.totalTtc).toFixed(2)}€ — ${inv.issueDate}`,
+  }));
+
+  const supplierInvoiceOptionsForUI = supplierInvoiceOptions.map((si) => ({
+    id: si.id,
+    label: `${si.supplierInvoiceNumber} — ${si.supplierSnapshot?.name ?? "?"} — ${Number(si.totalTtc).toFixed(2)}€ — ${si.issueDate}`,
   }));
 
   return (
@@ -181,9 +208,13 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
                     matchedInvoiceId: tx.matchedInvoiceId,
                     matchedInvoiceNumber: tx.matchedInvoiceNumber,
                     matchedInvoiceTotal: tx.matchedInvoiceTotal,
+                    matchedSupplierInvoiceId: tx.matchedSupplierInvoiceId,
+                    matchedSupplierInvoiceNumber: tx.matchedSupplierInvoiceNumber,
+                    matchedSupplierInvoiceTotal: tx.matchedSupplierInvoiceTotal,
                     matchNote: tx.matchNote,
                   }}
                   invoiceOptions={invoiceOptionsForUI}
+                  supplierInvoiceOptions={supplierInvoiceOptionsForUI}
                 />
               ))
             )}

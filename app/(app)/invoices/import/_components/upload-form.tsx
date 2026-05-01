@@ -3,9 +3,12 @@
 import { useRef, useState, useTransition } from "react";
 import { uploadInvoicePdfs } from "../_actions";
 
+type Direction = "client" | "supplier";
+
 export function UploadForm() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [direction, setDirection] = useState<Direction>("client");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -24,6 +27,7 @@ export function UploadForm() {
     if (files.length === 0) return;
     setError(null);
     const fd = new FormData();
+    fd.append("direction", direction);
     for (const f of files) fd.append("files", f);
     startTransition(async () => {
       try {
@@ -38,6 +42,22 @@ export function UploadForm() {
 
   return (
     <div className="grid gap-3">
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-neutral-600">Type d&apos;import :</span>
+        <DirectionTab
+          active={direction === "client"}
+          onClick={() => setDirection("client")}
+          label="Factures clients"
+          hint="que tu as émises (créances)"
+        />
+        <DirectionTab
+          active={direction === "supplier"}
+          onClick={() => setDirection("supplier")}
+          label="Factures fournisseurs"
+          hint="que tu as reçues (dettes)"
+        />
+      </div>
+
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
@@ -130,5 +150,34 @@ export function UploadForm() {
         </p>
       ) : null}
     </div>
+  );
+}
+
+function DirectionTab({
+  active,
+  onClick,
+  label,
+  hint,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  hint: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md px-3 py-1.5 text-left ${
+        active
+          ? "bg-neutral-900 text-white"
+          : "border border-neutral-300 bg-white hover:border-neutral-500"
+      }`}
+    >
+      <div className="text-xs font-medium">{label}</div>
+      <div className={`text-xs ${active ? "text-neutral-300" : "text-neutral-500"}`}>
+        {hint}
+      </div>
+    </button>
   );
 }

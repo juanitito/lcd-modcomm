@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import {
   setImportClient,
+  setImportSupplier,
   materializeImport,
   deleteImport,
   retryExtraction,
@@ -13,10 +14,13 @@ type ImportRecord = {
   id: string;
   pdfBlobUrl: string;
   sourceFilename: string | null;
+  direction: "client" | "supplier";
   status: string;
   errorMessage: string | null;
   matchedClientId: string | null;
+  matchedSupplierId: string | null;
   materializedInvoiceId: string | null;
+  materializedSupplierInvoiceId: string | null;
   extracted: {
     legacyNumber?: string | null;
     issueDate?: string | null;
@@ -26,7 +30,7 @@ type ImportRecord = {
   } | null;
 };
 
-type Client = { id: string; code: string; name: string };
+type Counterparty = { id: string; code: string; name: string };
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-neutral-100 text-neutral-700",
@@ -39,11 +43,18 @@ const STATUS_STYLES: Record<string, string> = {
 export function ImportRow({
   imp,
   clients,
+  suppliers,
 }: {
   imp: ImportRecord;
-  clients: Client[];
+  clients: Counterparty[];
+  suppliers: Counterparty[];
 }) {
-  const [clientId, setClientId] = useState(imp.matchedClientId ?? "");
+  const isClient = imp.direction === "client";
+  const matchedId = isClient ? imp.matchedClientId : imp.matchedSupplierId;
+  const options = isClient ? clients : suppliers;
+  const counterpartyLabel = isClient ? "client" : "fournisseur";
+
+  const [selectedId, setSelectedId] = useState(matchedId ?? "");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -54,9 +65,25 @@ export function ImportRow({
   const canMaterialize =
     imp.status !== "materialized" &&
     imp.status !== "failed" &&
-    !!clientId &&
+    !!selectedId &&
     !!ex?.legacyNumber &&
     !!ex?.issueDate;
+
+  const handleSelect = (newId: string) => {
+    setSelectedId(newId);
+    if (!newId || newId === matchedId) return;
+    startTransition(async () => {
+      try {
+        if (isClient) {
+          await setImportClient({ importId: imp.id, clientId: newId });
+        } else {
+          await setImportSupplier({ importId: imp.id, supplierId: newId });
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    });
+  };
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-white p-4">
@@ -67,6 +94,15 @@ export function ImportRow({
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[imp.status] ?? "bg-neutral-100 text-neutral-700"}`}
             >
               {imp.status}
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                isClient
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-purple-50 text-purple-700"
+              }`}
+            >
+              {isClient ? "↗ client" : "↘ fournisseur"}
             </span>
             {ex?.legacyNumber ? (
               <span className="font-mono text-sm">{ex.legacyNumber}</span>
@@ -98,7 +134,7 @@ export function ImportRow({
 
       {ex?.clientGuess?.name || ex?.clientGuess?.siret ? (
         <p className="mt-2 text-xs text-neutral-500">
-          Client détecté :{" "}
+          {isClient ? "Client" : "Fournisseur"} détecté :{" "}
           <span className="text-neutral-700">
             {ex.clientGuess.name ?? "?"}
             {ex.clientGuess.siret ? ` — SIRET ${ex.clientGuess.siret}` : ""}
@@ -108,25 +144,13 @@ export function ImportRow({
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <select
-          value={clientId}
-          onChange={(e) => {
-            const v = e.target.value;
-            setClientId(v);
-            if (v && v !== imp.matchedClientId) {
-              startTransition(async () => {
-                try {
-                  await setImportClient({ importId: imp.id, clientId: v });
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : String(err));
-                }
-              });
-            }
-          }}
+          value={selectedId}
+          onChange={(e) => handleSelect(e.target.value)}
           disabled={imp.status === "materialized" || isPending}
           className="input max-w-xs"
         >
-          <option value="">— matcher un client —</option>
-          {clients.map((c) => (
+          <option value="">— matcher un {counterpartyLabel} —</option>
+          {options.map((c) => (
             <option key={c.id} value={c.id}>
               {c.code} — {c.name}
             </option>

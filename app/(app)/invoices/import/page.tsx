@@ -9,14 +9,24 @@ export default async function InvoiceImportPage() {
     orderBy: [desc(schema.invoiceImports.createdAt)],
   });
 
-  const clients = await db
-    .select({
-      id: schema.clients.id,
-      code: schema.clients.code,
-      name: schema.clients.name,
-    })
-    .from(schema.clients)
-    .orderBy(asc(schema.clients.code));
+  const [clients, suppliers] = await Promise.all([
+    db
+      .select({
+        id: schema.clients.id,
+        code: schema.clients.code,
+        name: schema.clients.name,
+      })
+      .from(schema.clients)
+      .orderBy(asc(schema.clients.code)),
+    db
+      .select({
+        id: schema.suppliers.id,
+        code: schema.suppliers.code,
+        name: schema.suppliers.name,
+      })
+      .from(schema.suppliers)
+      .orderBy(asc(schema.suppliers.code)),
+  ]);
 
   const counts = imports.reduce<Record<string, number>>((acc, i) => {
     acc[i.status] = (acc[i.status] ?? 0) + 1;
@@ -70,7 +80,12 @@ export default async function InvoiceImportPage() {
         ) : (
           <div className="grid gap-3">
             {imports.map((i) => (
-              <ImportRow key={i.id} imp={i} clients={clients} />
+              <ImportRow
+                key={i.id}
+                imp={i}
+                clients={clients}
+                suppliers={suppliers}
+              />
             ))}
           </div>
         )}

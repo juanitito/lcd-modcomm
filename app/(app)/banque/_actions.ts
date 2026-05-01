@@ -101,7 +101,7 @@ export async function autoMatchTransactions(): Promise<{
 }> {
   await requireAuth();
 
-  const unmatched = await db
+  const unmatchedAll = await db
     .select({
       id: schema.qontoTransactions.id,
       amount: schema.qontoTransactions.amount,
@@ -113,92 +113,164 @@ export async function autoMatchTransactions(): Promise<{
     .from(schema.qontoTransactions)
     .where(
       and(
-        sql`${schema.qontoTransactions.amount}::numeric > 0`,
         isNull(schema.qontoTransactions.matchedInvoiceId),
+        isNull(schema.qontoTransactions.matchedSupplierInvoiceId),
       ),
     );
 
-  // Pré-charge toutes les invoices émises (volume faible : ~20 historiques + à venir)
-  const allInvoices = await db
-    .select({
-      id: schema.invoices.id,
-      invoiceNumber: schema.invoices.invoiceNumber,
-      issueDate: schema.invoices.issueDate,
-      totalTtc: schema.invoices.totalTtc,
-      clientSnapshot: schema.invoices.clientSnapshot,
-      status: schema.invoices.status,
-    })
-    .from(schema.invoices)
-    .where(eq(schema.invoices.status, "issued"));
+  const [allClientInvoices, allSupplierInvoices] = await Promise.all([
+    db
+      .select({
+        id: schema.invoices.id,
+        invoiceNumber: schema.invoices.invoiceNumber,
+        issueDate: schema.invoices.issueDate,
+        totalTtc: schema.invoices.totalTtc,
+        clientSnapshot: schema.invoices.clientSnapshot,
+      })
+      .from(schema.invoices)
+      .where(eq(schema.invoices.status, "issued")),
+    db
+      .select({
+        id: schema.supplierInvoices.id,
+        supplierInvoiceNumber: schema.supplierInvoices.supplierInvoiceNumber,
+        issueDate: schema.supplierInvoices.issueDate,
+        totalTtc: schema.supplierInvoices.totalTtc,
+        supplierSnapshot: schema.supplierInvoices.supplierSnapshot,
+      })
+      .from(schema.supplierInvoices)
+      .where(eq(schema.supplierInvoices.status, "issued")),
+  ]);
 
   let matched = 0;
   let ambiguous = 0;
 
-  for (const tx of unmatched) {
+  for (const tx of unmatchedAll) {
     const txAmount = Number(tx.amount);
-    if (!Number.isFinite(txAmount) || txAmount <= 0) continue;
+    if (!Number.isFinite(txAmount) || txAmount === 0) continue;
 
+    const isCredit = txAmount > 0;
+    const absAmount = Math.abs(txAmount);
     const refMs = (tx.settledAt ?? new Date(tx.date)).getTime();
     const fromMs = refMs - DATE_WINDOW_DAYS * ONE_DAY_MS;
     const toMs = refMs + DATE_WINDOW_DAYS * ONE_DAY_MS;
     const counterparty = tx.counterpartyName ?? tx.label ?? "";
 
-    const candidates = allInvoices
-      .filter((inv) => {
-        const total = Number(inv.totalTtc);
-        if (!Number.isFinite(total)) return false;
-        if (Math.abs(total - txAmount) > AMOUNT_TOLERANCE) return false;
-        const issueMs = new Date(inv.issueDate).getTime();
-        return issueMs >= fromMs && issueMs <= toMs;
-      })
-      .map((inv) => ({
-        inv,
-        score: tokenOverlap(inv.clientSnapshot?.name ?? "", counterparty),
-      }))
-      .sort((a, b) => b.score - a.score);
+    if (isCredit) {
+      const candidates = allClientInvoices
+        .filter((inv) => {
+          const total = Number(inv.totalTtc);
+          if (!Number.isFinite(total)) return false;
+          if (Math.abs(total - absAmount) > AMOUNT_TOLERANCE) return false;
+          const issueMs = new Date(inv.issueDate).getTime();
+          return issueMs >= fromMs && issueMs <= toMs;
+        })
+        .map((inv) => ({
+          inv,
+          score: tokenOverlap(inv.clientSnapshot?.name ?? "", counterparty),
+        }))
+        .sort((a, b) => b.score - a.score);
 
-    if (candidates.length === 0) continue;
-    const top = candidates[0];
-    if (top.score < NAME_MATCH_THRESHOLD) continue;
-    const second = candidates[1];
-    if (second && second.score >= top.score - NAME_TIE_MARGIN) {
-      // Ambigu : 2+ candidats à score équivalent → on laisse manuel
-      ambiguous++;
-      continue;
+      if (candidates.length === 0) continue;
+      const top = candidates[0];
+      if (top.score < NAME_MATCH_THRESHOLD) continue;
+      const second = candidates[1];
+      if (second && second.score >= top.score - NAME_TIE_MARGIN) {
+        ambiguous++;
+        continue;
+      }
+
+      await db
+        .update(schema.qontoTransactions)
+        .set({
+          matchedInvoiceId: top.inv.id,
+          matchedAt: new Date(),
+          matchNote: `Auto-match client (score nom ${top.score.toFixed(2)})`,
+        })
+        .where(eq(schema.qontoTransactions.id, tx.id));
+      matched++;
+    } else {
+      const candidates = allSupplierInvoices
+        .filter((si) => {
+          const total = Number(si.totalTtc);
+          if (!Number.isFinite(total)) return false;
+          if (Math.abs(total - absAmount) > AMOUNT_TOLERANCE) return false;
+          const issueMs = new Date(si.issueDate).getTime();
+          return issueMs >= fromMs && issueMs <= toMs;
+        })
+        .map((si) => ({
+          si,
+          score: tokenOverlap(si.supplierSnapshot?.name ?? "", counterparty),
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      if (candidates.length === 0) continue;
+      const top = candidates[0];
+      if (top.score < NAME_MATCH_THRESHOLD) continue;
+      const second = candidates[1];
+      if (second && second.score >= top.score - NAME_TIE_MARGIN) {
+        ambiguous++;
+        continue;
+      }
+
+      await db
+        .update(schema.qontoTransactions)
+        .set({
+          matchedSupplierInvoiceId: top.si.id,
+          matchedAt: new Date(),
+          matchNote: `Auto-match fournisseur (score nom ${top.score.toFixed(2)})`,
+        })
+        .where(eq(schema.qontoTransactions.id, tx.id));
+      matched++;
     }
-
-    await db
-      .update(schema.qontoTransactions)
-      .set({
-        matchedInvoiceId: top.inv.id,
-        matchedAt: new Date(),
-        matchNote: `Auto-match (score nom ${top.score.toFixed(2)})`,
-      })
-      .where(eq(schema.qontoTransactions.id, tx.id));
-    matched++;
   }
 
   revalidatePath("/banque");
-  return { matched, scanned: unmatched.length, ambiguous };
+  return { matched, scanned: unmatchedAll.length, ambiguous };
 }
 
 // ---------- Manual match / unmatch ----------
 
-const setSchema = z.object({
+const matchClientSchema = z.object({
   txId: z.string().uuid(),
   invoiceId: z.string().uuid(),
 });
 
+const matchSupplierSchema = z.object({
+  txId: z.string().uuid(),
+  supplierInvoiceId: z.string().uuid(),
+});
+
 export async function setManualMatch(input: { txId: string; invoiceId: string }) {
   await requireAuth();
-  const data = setSchema.parse(input);
+  const data = matchClientSchema.parse(input);
 
   await db
     .update(schema.qontoTransactions)
     .set({
       matchedInvoiceId: data.invoiceId,
+      matchedSupplierInvoiceId: null,
       matchedAt: new Date(),
-      matchNote: "Match manuel",
+      matchNote: "Match manuel client",
+    })
+    .where(eq(schema.qontoTransactions.id, data.txId));
+
+  revalidatePath("/banque");
+}
+
+export async function setManualSupplierMatch(input: {
+  txId: string;
+  supplierInvoiceId: string;
+}) {
+  await requireAuth();
+  const data = matchSupplierSchema.parse(input);
+
+  await db
+    .update(schema.qontoTransactions)
+    .set({
+      matchedSupplierInvoiceId: data.supplierInvoiceId,
+      matchedInvoiceId: null,
+      matchedAt: new Date(),
+      matchNote: "Match manuel fournisseur",
     })
     .where(eq(schema.qontoTransactions.id, data.txId));
 
@@ -215,6 +287,7 @@ export async function clearMatch(txId: string) {
     .update(schema.qontoTransactions)
     .set({
       matchedInvoiceId: null,
+      matchedSupplierInvoiceId: null,
       matchedSupplierOrderId: null,
       matchedAt: null,
       matchNote: null,

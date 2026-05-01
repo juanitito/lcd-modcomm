@@ -27,7 +27,7 @@ export const invoiceExtractionSchema = z.object({
       address: z.string().nullable(),
     })
     .describe(
-      "Identité du client telle qu'elle apparaît sur la facture. Tous les champs peuvent être null.",
+      "Identité de la contrepartie telle qu'elle apparaît sur la facture. Pour une facture émise (côté client) : le client/destinataire. Pour une facture reçue (côté fournisseur) : l'émetteur. Tous les champs peuvent être null.",
     ),
   lines: z
     .array(
@@ -62,11 +62,20 @@ const SYSTEM = `Tu es un assistant qui extrait des données structurées de fact
 Sois rigoureux : si une information n'est pas explicitement présente, retourne null plutôt que de l'inventer.
 Les montants sont en euros, les taux TVA en pourcentage (ex: 20, 10, 5.5, 2.1, 0.9).
 Les dates au format ISO YYYY-MM-DD.
-Les lignes doivent reproduire l'ordre du document.`;
+Les lignes doivent reproduire l'ordre du document.
+Le champ clientGuess représente la contrepartie sur le document (= la partie qui n'est pas le contexte d'analyse).`;
+
+export type ExtractionDirection = "client" | "supplier";
 
 export async function extractInvoice(
   pdfBuffer: Buffer | Uint8Array,
+  direction: ExtractionDirection = "client",
 ): Promise<InvoiceExtraction> {
+  const counterpartyHint =
+    direction === "client"
+      ? "Cette facture a été ÉMISE par notre entreprise (Lascia Corre Distribution). Extrais clientGuess = identité du DESTINATAIRE/CLIENT (qui doit nous payer)."
+      : "Cette facture nous a été ENVOYÉE par un fournisseur. Extrais clientGuess = identité de l'ÉMETTEUR/FOURNISSEUR (qu'on doit payer). N'extrais PAS notre propre identité (Lascia Corre Distribution).";
+
   const { object } = await generateObject({
     model: "anthropic/claude-sonnet-4-6",
     schema: invoiceExtractionSchema,
@@ -77,7 +86,7 @@ export async function extractInvoice(
         content: [
           {
             type: "text",
-            text: "Voici une facture. Extrais-en les données structurées.",
+            text: `${counterpartyHint}\n\nVoici la facture. Extrais-en les données structurées.`,
           },
           {
             type: "file",
