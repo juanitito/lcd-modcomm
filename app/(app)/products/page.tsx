@@ -8,7 +8,7 @@ export default function ProductsPage() {
         "Liste des produits (import depuis BDDP)",
         "Fiche produit : conditionnement, MOQ, fournisseur, PA, PDV, TVA",
         "Liens FT / FDS / photo (Google Drive ou Vercel Blob)",
-        "Famille produit & flag contact alimentaire (FAL)",
+        "Famille produit",
         "Édition en masse (copier-coller depuis Excel)",
       ]}
     />

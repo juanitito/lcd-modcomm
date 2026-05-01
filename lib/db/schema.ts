@@ -112,7 +112,6 @@ export const products = pgTable(
     pictureUrl: text("picture_url"),
     weightKg: numeric("weight_kg", { precision: 10, scale: 3 }),
     volumeL: numeric("volume_l", { precision: 10, scale: 3 }),
-    isFoodContact: boolean("is_food_contact"), // colonne FAL (à confirmer avec user)
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
