@@ -2,8 +2,8 @@ import Link from "next/link";
 import { and, asc, count, eq, ilike, or } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { formatEurUnit, formatPct, marginPct } from "@/lib/format";
-import { SearchInput } from "./_components/search-input";
-import { FilterSelect } from "./_components/filter-select";
+import { SearchInput } from "@/components/search-input";
+import { FilterSelect } from "@/components/filter-select";
 
 const PAGE_SIZE = 50;
 
@@ -92,18 +92,24 @@ export default async function ProductsPage({ searchParams }: { searchParams: SP 
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <SearchInput initial={q} />
+        <SearchInput
+          initial={q}
+          basePath="/products"
+          placeholder="Rechercher (code, désignation)…"
+        />
         <FilterSelect
           name="supplier"
           value={supplierCode}
           options={supplierOptions}
           placeholder="Tous fournisseurs"
+          basePath="/products"
         />
         <FilterSelect
           name="family"
           value={familyCode}
           options={familyOptions}
           placeholder="Toutes familles"
+          basePath="/products"
         />
       </div>
 

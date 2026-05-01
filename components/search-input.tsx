@@ -3,7 +3,15 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
-export function SearchInput({ initial }: { initial: string }) {
+export function SearchInput({
+  initial,
+  basePath,
+  placeholder,
+}: {
+  initial: string;
+  basePath: string;
+  placeholder: string;
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const [value, setValue] = useState(initial);
@@ -16,7 +24,7 @@ export function SearchInput({ initial }: { initial: string }) {
       else next.delete("q");
       next.delete("page");
       startTransition(() => {
-        router.replace(`/products?${next.toString()}`);
+        router.replace(`${basePath}?${next.toString()}`);
       });
     }, 200);
     return () => clearTimeout(id);
@@ -29,7 +37,7 @@ export function SearchInput({ initial }: { initial: string }) {
         type="search"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Rechercher (code, désignation)…"
+        placeholder={placeholder}
         className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
       />
       {isPending ? (

@@ -9,11 +9,13 @@ export function FilterSelect({
   value,
   options,
   placeholder,
+  basePath,
 }: {
   name: string;
   value: string;
   options: Option[];
   placeholder: string;
+  basePath: string;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -25,7 +27,7 @@ export function FilterSelect({
         if (e.target.value) next.set(name, e.target.value);
         else next.delete(name);
         next.delete("page");
-        router.replace(`/products?${next.toString()}`);
+        router.replace(`${basePath}?${next.toString()}`);
       }}
       className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
     >

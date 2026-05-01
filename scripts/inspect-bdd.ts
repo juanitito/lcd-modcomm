@@ -1,3 +1,6 @@
+// Exploration ad hoc du fichier source legacy.
+// Liste les feuilles, échantillonne les colonnes, et compte les valeurs distinctes
+// des colonnes "intéressantes". Sert à découvrir la structure avant de coder un import.
 import ExcelJS from "exceljs";
 import path from "node:path";
 
@@ -5,10 +8,15 @@ function cellText(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "object") {
     if ("richText" in v) {
-      return (v as { richText: { text: string }[] }).richText.map((t) => t.text).join("");
+      return (v as { richText: { text: string }[] }).richText
+        .map((t) => t.text)
+        .join("");
     }
     if ("text" in v) return String((v as { text: string }).text);
-    if ("hyperlink" in v) return String((v as { text?: string; hyperlink: string }).text ?? (v as { hyperlink: string }).hyperlink);
+    if ("hyperlink" in v) {
+      const o = v as { text?: string; hyperlink: string };
+      return String(o.text ?? o.hyperlink);
+    }
     if ("result" in v) return String((v as { result: unknown }).result ?? "");
   }
   return String(v);
@@ -19,65 +27,44 @@ async function main() {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
 
-  const bddp = wb.getWorksheet("BDDP")!;
-  const header = (bddp.getRow(1).values as unknown[]).map(cellText);
-  const idx = (name: string) => header.findIndex((h) => h === name);
-
-  let nb = 0;
-  const fournisseurs = new Map<string, number>();
-  const familles = new Map<string, number>();
-  const falValues = new Map<string, number>();
-  const tvaPresent = { yes: 0, no: 0 };
-
-  for (let r = 2; r <= bddp.rowCount; r++) {
-    const row = bddp.getRow(r);
-    const code = cellText(row.getCell(idx("CODE")).value).trim();
-    if (!code) continue;
-    nb++;
-
-    const f = cellText(row.getCell(idx("FOURNISSEUR")).value).trim();
-    if (f) fournisseurs.set(f, (fournisseurs.get(f) ?? 0) + 1);
-
-    const fam = cellText(row.getCell(idx("FAMILLE PRODUIT")).value).trim();
-    if (fam) familles.set(fam, (familles.get(fam) ?? 0) + 1);
-
-    const fal = cellText(row.getCell(idx("FAL")).value).trim();
-    falValues.set(fal || "(vide)", (falValues.get(fal || "(vide)") ?? 0) + 1);
+  console.log(`Feuilles disponibles dans ${path.basename(file)} :`);
+  for (const ws of wb.worksheets) {
+    console.log(`  - ${ws.name} (${ws.rowCount} lignes, ${ws.columnCount} colonnes)`);
   }
 
-  console.log(`BDDP : ${nb} produits réels`);
-  console.log(`\nFournisseurs (${fournisseurs.size}):`);
-  for (const [k, v] of [...fournisseurs.entries()].sort((a, b) => b[1] - a[1])) {
-    console.log(`  ${k.padEnd(8)} ${v}`);
-  }
-  console.log(`\nFamilles produit (${familles.size}):`);
-  for (const [k, v] of [...familles.entries()].sort((a, b) => b[1] - a[1])) {
-    console.log(`  ${k.padEnd(8)} ${v}`);
-  }
-  console.log(`\nValeurs FAL :`);
-  for (const [k, v] of [...falValues.entries()].sort((a, b) => b[1] - a[1])) {
-    console.log(`  ${k.padEnd(10)} ${v}`);
-  }
+  for (const ws of wb.worksheets) {
+    console.log(`\n━━━ ${ws.name} ━━━`);
+    const header = (ws.getRow(1).values as unknown[]).map(cellText);
+    console.log(`En-têtes : ${header.filter(Boolean).join(" | ")}`);
 
-  // Échantillon de produits avec FAL = "O" pour deviner le sens
-  console.log(`\n5 produits avec FAL=O :`);
-  let shown = 0;
-  for (let r = 2; r <= bddp.rowCount && shown < 5; r++) {
-    const row = bddp.getRow(r);
-    const fal = cellText(row.getCell(idx("FAL")).value).trim();
-    if (fal === "O") {
-      shown++;
-      console.log(`  ${cellText(row.getCell(idx("CODE")).value)} - ${cellText(row.getCell(idx("DESIGNATION")).value)}`);
+    // Échantillon des 3 premières lignes de données
+    console.log("Échantillon (3 premières lignes) :");
+    for (let r = 2; r <= Math.min(4, ws.rowCount); r++) {
+      const row = ws.getRow(r);
+      const cells = (row.values as unknown[]).map(cellText);
+      console.log(`  L${r}: ${cells.slice(1, 8).map((c) => c.slice(0, 30)).join(" | ")}`);
     }
   }
-  console.log(`\n5 produits avec FAL=0 :`);
-  shown = 0;
-  for (let r = 2; r <= bddp.rowCount && shown < 5; r++) {
-    const row = bddp.getRow(r);
-    const fal = cellText(row.getCell(idx("FAL")).value).trim();
-    if (fal === "0") {
-      shown++;
-      console.log(`  ${cellText(row.getCell(idx("CODE")).value)} - ${cellText(row.getCell(idx("DESIGNATION")).value)}`);
+
+  // Aussi le second fichier 000.004.MODCOMM.xlsx
+  const file2 = path.resolve("data/legacy-excel/000.004.MODCOMM.xlsx");
+  const wb2 = new ExcelJS.Workbook();
+  await wb2.xlsx.readFile(file2);
+
+  console.log(`\n\nFeuilles dans ${path.basename(file2)} :`);
+  for (const ws of wb2.worksheets) {
+    console.log(`  - ${ws.name} (${ws.rowCount} lignes, ${ws.columnCount} colonnes)`);
+  }
+
+  for (const ws of wb2.worksheets) {
+    console.log(`\n━━━ ${ws.name} ━━━`);
+    const header = (ws.getRow(1).values as unknown[]).map(cellText);
+    console.log(`En-têtes : ${header.filter(Boolean).join(" | ")}`);
+    console.log("Échantillon (3 premières lignes) :");
+    for (let r = 2; r <= Math.min(4, ws.rowCount); r++) {
+      const row = ws.getRow(r);
+      const cells = (row.values as unknown[]).map(cellText);
+      console.log(`  L${r}: ${cells.slice(1, 10).map((c) => c.slice(0, 30)).join(" | ")}`);
     }
   }
 }
