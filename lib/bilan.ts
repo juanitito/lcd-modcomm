@@ -455,7 +455,27 @@ export async function computeCompteResultatFormel(
   charges.push({ label: "CHARGES D'EXPLOITATION", level: 0, isHeader: true, amountN: 0, amountN1: 0 });
   charges.push({ label: "Achats de marchandises", level: 1, accountHint: "607", amountN: sumC(perN, startsWith(["607"])), amountN1: sumC(perN1, startsWith(["607"])) });
   charges.push({ label: "Achats de matières et autres approvisionnements", level: 1, accountHint: "601-606", amountN: sumC(perN, (c) => /^60[1-6]/.test(c)), amountN1: sumC(perN1, (c) => /^60[1-6]/.test(c)) });
-  charges.push({ label: "Autres achats et charges externes", level: 1, accountHint: "61, 62", amountN: sumC(perN, startsWith(["61", "62"])), amountN1: sumC(perN1, startsWith(["61", "62"])) });
+  charges.push({
+    label: "Transports de biens (sur achats et ventes)",
+    level: 1,
+    accountHint: "624",
+    amountN: sumC(perN, startsWith(["624"])),
+    amountN1: sumC(perN1, startsWith(["624"])),
+  });
+  // 61-62 hors 624 (déjà sorti sur sa propre ligne)
+  charges.push({
+    label: "Autres achats et charges externes",
+    level: 1,
+    accountHint: "61, 62 (hors 624)",
+    amountN: sumC(
+      perN,
+      (c) => (c.startsWith("61") || c.startsWith("62")) && !c.startsWith("624"),
+    ),
+    amountN1: sumC(
+      perN1,
+      (c) => (c.startsWith("61") || c.startsWith("62")) && !c.startsWith("624"),
+    ),
+  });
   charges.push({ label: "Impôts, taxes et versements assimilés", level: 1, accountHint: "63", amountN: sumC(perN, startsWith(["63"])), amountN1: sumC(perN1, startsWith(["63"])) });
   charges.push({ label: "Salaires et traitements", level: 1, accountHint: "641", amountN: sumC(perN, startsWith(["641"])), amountN1: sumC(perN1, startsWith(["641"])) });
   charges.push({ label: "Charges sociales", level: 1, accountHint: "645-648", amountN: sumC(perN, (c) => /^64[5-8]/.test(c)), amountN1: sumC(perN1, (c) => /^64[5-8]/.test(c)) });
