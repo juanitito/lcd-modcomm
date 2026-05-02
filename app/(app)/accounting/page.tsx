@@ -11,7 +11,7 @@ const SECTIONS = [
     href: "/accounting/tva",
     title: "TVA",
     desc: "Déclarations mensuelles, ventilation par taux (Corse 2,1% / 20%). Export XLSX format CA3.",
-    ready: false,
+    ready: true,
   },
   {
     href: "/accounting/creances-dettes",
