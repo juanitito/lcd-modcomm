@@ -5,6 +5,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth/session";
 import { db, schema } from "@/lib/db";
+import {
+  CLASSIFICATION_KINDS,
+  type ClassificationKind,
+  deleteJournalEntry,
+  ensurePcgAccountsExist,
+  getOrCreatePeriodForDate,
+  nextEntryNumber,
+} from "@/lib/accounting";
 import { getOrganization, iterateTransactions, toQontoRow } from "@/lib/qonto";
 import { nameMatchScore } from "@/lib/text-match";
 
@@ -263,16 +271,132 @@ export async function clearMatch(txId: string) {
   await requireAuth();
   const id = idSchema.parse(txId);
 
+  // Si la transaction était classée (écriture comptable non-facture), on la
+  // débranche aussi et on supprime l'écriture associée.
+  const tx = await db.query.qontoTransactions.findFirst({
+    where: eq(schema.qontoTransactions.id, id),
+    columns: { journalEntryId: true },
+  });
+
   await db
     .update(schema.qontoTransactions)
     .set({
       matchedInvoiceId: null,
       matchedSupplierInvoiceId: null,
       matchedSupplierOrderId: null,
+      journalEntryId: null,
       matchedAt: null,
       matchNote: null,
     })
     .where(eq(schema.qontoTransactions.id, id));
 
+  if (tx?.journalEntryId) {
+    await deleteJournalEntry(tx.journalEntryId);
+  }
+
   revalidatePath("/banque");
+}
+
+// ---------- Classification non-facture (multi-kinds) ----------
+
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
+const classifySchema = z.object({
+  txId: z.string().uuid(),
+  kind: z.enum(
+    Object.keys(CLASSIFICATION_KINDS) as [
+      ClassificationKind,
+      ...ClassificationKind[],
+    ],
+  ),
+});
+
+export async function classifyTransaction(input: {
+  txId: string;
+  kind: ClassificationKind;
+}): Promise<ActionResult> {
+  await requireAuth();
+  const data = classifySchema.parse(input);
+  const def = CLASSIFICATION_KINDS[data.kind];
+
+  const tx = await db.query.qontoTransactions.findFirst({
+    where: eq(schema.qontoTransactions.id, data.txId),
+  });
+  if (!tx) return { ok: false, error: "Transaction introuvable." };
+  if (tx.matchedInvoiceId || tx.matchedSupplierInvoiceId) {
+    return { ok: false, error: "Transaction déjà rapprochée à une facture." };
+  }
+  if (tx.journalEntryId) {
+    return { ok: false, error: "Transaction déjà classée." };
+  }
+  const amount = Number(tx.amount);
+  if (!Number.isFinite(amount) || amount === 0) {
+    return { ok: false, error: "Montant invalide." };
+  }
+  if (def.side === "credit" && amount <= 0) {
+    return {
+      ok: false,
+      error: `${def.label} : attendu un crédit (montant > 0).`,
+    };
+  }
+  if (def.side === "debit" && amount >= 0) {
+    return {
+      ok: false,
+      error: `${def.label} : attendu un débit (montant < 0).`,
+    };
+  }
+
+  await ensurePcgAccountsExist();
+
+  const txDate = tx.settledAt ?? new Date(tx.date);
+  const period = await getOrCreatePeriodForDate(txDate);
+  const entryNumber = await nextEntryNumber(txDate, "BQ");
+
+  const counterparty = tx.counterpartyName ?? tx.label ?? "—";
+  const label = `${def.label} — ${counterparty}`;
+  const dateIso = txDate.toISOString().slice(0, 10);
+  const absAmountStr = Math.abs(amount).toFixed(2);
+
+  const [entry] = await db
+    .insert(schema.journalEntries)
+    .values({
+      periodId: period.id,
+      entryNumber,
+      date: dateIso,
+      journal: "BQ",
+      label,
+      status: "draft",
+    })
+    .returning({ id: schema.journalEntries.id });
+
+  await db.insert(schema.journalLines).values([
+    {
+      entryId: entry.id,
+      accountCode: def.debit,
+      label,
+      debit: absAmountStr,
+      credit: "0.00",
+      position: 0,
+    },
+    {
+      entryId: entry.id,
+      accountCode: def.credit,
+      label,
+      debit: "0.00",
+      credit: absAmountStr,
+      position: 1,
+    },
+  ]);
+
+  await db
+    .update(schema.qontoTransactions)
+    .set({
+      journalEntryId: entry.id,
+      matchedAt: new Date(),
+      matchNote: `Classé : ${def.shortLabel} (${def.debit}/${def.credit})`,
+    })
+    .where(eq(schema.qontoTransactions.id, data.txId));
+
+  revalidatePath("/banque");
+  return { ok: true };
 }
