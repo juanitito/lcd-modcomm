@@ -45,9 +45,9 @@ export default async function TvaPage({
           </p>
           <h1 className="mt-1 text-2xl font-semibold">TVA — {exercice}</h1>
           <p className="mt-1 text-sm text-neutral-600">
-            Ventilation par mois × taux. Régime Corse (art. 297 CGI) : 2,1 %
-            denrées alimentaires, 20 % autres. Lecture du taux par ligne de
-            facture (vatBreakdown).
+            Ventilation par mois × taux. LCD applique 20 % à toutes ses
+            ventes. Lecture du taux par ligne de facture (vatBreakdown) — la
+            structure supporte d'autres taux si une facture les contient.
           </p>
         </div>
         <a
