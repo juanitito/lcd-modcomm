@@ -7,43 +7,10 @@
    @import './components.css';
    ============================================================ */
 
-/* ── Reset minimal ── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-/* ── Base ── */
-html { -webkit-text-size-adjust: 100%; }
-
-body {
-  font-family: var(--font-sans);
-  font-size: var(--text-base);
-  font-weight: var(--weight-regular);
-  line-height: var(--leading-normal);
-  color: var(--slate-800);
-  background: var(--slate-50);
-  -webkit-font-smoothing: antialiased;
-}
-
-/* ── Typographie ── */
-h1 {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
-  color: var(--slate-800);
-}
-h2 {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-snug);
-  color: var(--slate-800);
-}
-h3 {
-  font-size: var(--text-md);
-  font-weight: var(--weight-medium);
-  line-height: var(--leading-snug);
-  color: var(--slate-800);
-}
+/* Reset global et styles d'éléments retirés : Tailwind v4 preflight gère
+ * déjà box-sizing et les reset de margins. Les tailles h1-h3 sont gérées
+ * par les classes utilitaires Tailwind (text-2xl, etc.) sur chaque page.
+ * On ne garde ici que les classes utilitaires propres à la charte. */
 
 .text-label {
   font-size: var(--text-xs);

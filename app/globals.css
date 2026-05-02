@@ -2,8 +2,80 @@
 @import "./tokens.css";
 @import "./components.css";
 
+/* ============================================================
+   Mapping palette Tailwind → charte LCD ModComm
+   ============================================================
+   Les classes Tailwind (text-neutral-X, bg-blue-X, etc.) prennent
+   automatiquement les couleurs de la charte. Pas besoin de
+   refactorer chaque page — juste de mettre à jour le thème. */
+@theme {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  /* Charte "neutral" = slate ardoise */
+  --color-neutral-50: #F5F8FC;
+  --color-neutral-100: #E8EEF6;
+  --color-neutral-200: #CDD8E8;
+  --color-neutral-300: #B5C3D6;
+  --color-neutral-400: #8FA5C0;
+  --color-neutral-500: #6E87A6;
+  --color-neutral-600: #4E6A8A;
+  --color-neutral-700: #324A6B;
+  --color-neutral-800: #1E3450;
+  --color-neutral-900: #0D1F35;
+
+  /* Charte "slate" — alias des mêmes couleurs */
+  --color-slate-50: #F5F8FC;
+  --color-slate-100: #E8EEF6;
+  --color-slate-200: #CDD8E8;
+  --color-slate-400: #8FA5C0;
+  --color-slate-600: #4E6A8A;
+  --color-slate-800: #1E3450;
+  --color-slate-900: #0D1F35;
+
+  /* Charte "blue" (principal) */
+  --color-blue-50: #EBF4FF;
+  --color-blue-100: #C8E2FA;
+  --color-blue-200: #92C3F2;
+  --color-blue-400: #3B8BD4;
+  --color-blue-500: #2572BB;
+  --color-blue-600: #185FA5;
+  --color-blue-700: #0F4A88;
+  --color-blue-800: #0C3870;
+  --color-blue-900: #07224A;
+
+  /* Charte "sky" (accent) */
+  --color-sky-50: #F0F9FF;
+  --color-sky-200: #BAE6FD;
+  --color-sky-400: #38BDF8;
+  --color-sky-600: #0284C7;
+
+  /* Indigo pour cohérence avec les composants existants (split, kinds) */
+  --color-indigo-50: #EBF4FF;
+  --color-indigo-100: #C8E2FA;
+  --color-indigo-200: #92C3F2;
+  --color-indigo-300: #3B8BD4;
+  --color-indigo-500: #2572BB;
+  --color-indigo-600: #185FA5;
+  --color-indigo-700: #0F4A88;
+  --color-indigo-900: #07224A;
+
+  /* Rayons cohérents avec la charte */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
 @layer components {
   .input {
-    @apply w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none disabled:bg-neutral-100 disabled:text-neutral-500;
+    @apply w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-800 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20 disabled:bg-neutral-100 disabled:text-neutral-400;
   }
+}
+
+/* Body : utilise les tokens de la charte */
+body {
+  font-family: var(--font-sans);
+  background: var(--slate-50);
+  color: var(--slate-800);
 }
