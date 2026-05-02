@@ -10,6 +10,7 @@ import {
   type ClassificationKind,
   deleteJournalEntry,
   ensurePcgAccountsExist,
+  ensureTierAccount,
   getOrCreatePeriodForDate,
   nextEntryNumber,
   writeClientInvoicePaymentJE,
@@ -594,8 +595,14 @@ export async function splitTransaction(input: {
       if (!inv) {
         return { ok: false, error: `Facture fournisseur ${s.target.id} introuvable.` };
       }
+      const supplier = await db.query.suppliers.findFirst({
+        where: eq(schema.suppliers.id, inv.supplierId),
+      });
+      const tierAccount = supplier
+        ? await ensureTierAccount("401", supplier.code, supplier.name)
+        : "401";
       lineSpecs.push({
-        accountCode: "401",
+        accountCode: tierAccount,
         label: `Paiement facture ${inv.supplierInvoiceNumber}`,
         matchedInvoiceId: null,
         matchedSupplierInvoiceId: inv.id,
@@ -614,8 +621,14 @@ export async function splitTransaction(input: {
       if (!inv) {
         return { ok: false, error: `Facture client ${s.target.id} introuvable.` };
       }
+      const client = await db.query.clients.findFirst({
+        where: eq(schema.clients.id, inv.clientId),
+      });
+      const tierAccount = client
+        ? await ensureTierAccount("411", client.code, client.name)
+        : "411";
       lineSpecs.push({
-        accountCode: "411",
+        accountCode: tierAccount,
         label: `Encaissement facture ${inv.invoiceNumber}`,
         matchedInvoiceId: inv.id,
         matchedSupplierInvoiceId: null,
