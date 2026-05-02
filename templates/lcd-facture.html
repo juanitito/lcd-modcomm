@@ -45,7 +45,7 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
 .tot-line{display:flex;justify-content:space-between;padding:5px 0;font-size:9pt;border-bottom:1px solid var(--mid);}
 .tot-line:last-child{border-bottom:none;}
 .tot-label{color:var(--muted);font-size:8pt;text-transform:uppercase;letter-spacing:.5px;}
-.tot-line.grand{background:var(--navy);color:#fff;padding:9px 12px;margin-top:5px;font-family:'Playfair Display',serif;font-size:12pt;font-weight:600;margin-left:-12px;margin-right:-12px;}
+.tot-line.grand{background:var(--navy);color:#fff;padding:9px 12px;margin-top:5px;font-family:'Playfair Display',serif;font-size:12pt;font-weight:600;margin-left:-12px;}
 .tot-line.grand .tot-label{color:rgba(255,255,255,.8);font-size:9pt;}
 .footer-split{display:flex;border-top:2px solid var(--navy);margin-top:auto;}
 .footer-col{flex:1;padding:16px 24px;background:var(--light);border-right:1px solid var(--mid);}
@@ -79,10 +79,10 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
       <div class="doc-type">Facture</div>
       <div class="doc-meta">
         <table>
-          <tr><td>N°</td><td>2411002</td></tr>
-          <tr><td>Date</td><td>29/11/2024</td></tr>
-          <tr><td>Échéance</td><td>À réception</td></tr>
-          <tr><td>Code client</td><td>0222</td></tr>
+          <tr><td>N°</td><td>{{invoiceNumber}}</td></tr>
+          <tr><td>Date</td><td>{{issueDate}}</td></tr>
+          <tr><td>Échéance</td><td>{{dueDate}}</td></tr>
+          <tr><td>Code client</td><td>{{client.code}}</td></tr>
         </table>
       </div>
     </div>
@@ -93,26 +93,26 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
       <div class="party-label">Émetteur</div>
       <div class="party-name">Lascia Corre Distribution</div>
       <div class="party-details">
-        SARL au capital de 1 000 €<br>
+        SAS au capital de 1 000 €<br>
         10, rue de l'Archipel — 20000 Ajaccio<br>
         N° TVA : FR25925390254
       </div>
     </div>
     <div class="party-col">
       <div class="party-label">Facturé à</div>
-      <div class="party-name">Copafrais</div>
+      <div class="party-name">{{client.name}}</div>
       <div class="party-details">
-        Lieu dit Michel Ange<br>
-        Afa<br>
-        Code client : 0222
+        {{#if client.billingAddress}}{{client.billingAddress}}<br>{{/if}}
+        {{#if client.billingCity}}{{client.billingZip}} {{client.billingCity}}<br>{{/if}}
+        Code client : {{client.code}}
       </div>
     </div>
     <div class="party-col">
       <div class="party-label">Livraison</div>
-      <div class="party-name">Adresse de livraison</div>
+      <div class="party-name">{{shipping.name}}</div>
       <div class="party-details">
-        Lieu dit Michel Ange<br>
-        Afa
+        {{#if shipping.address}}{{shipping.address}}<br>{{/if}}
+        {{#if shipping.city}}{{shipping.zip}} {{shipping.city}}{{/if}}
       </div>
     </div>
   </div>
@@ -131,51 +131,31 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
         </tr>
       </thead>
       <tbody>
+        {{#each lines}}
         <tr>
-          <td><span class="code">00TA11</span></td>
-          <td><span class="item-name">Vinaigre blanc 1,5L</span><br><span class="item-sub">Bouteille de 1,5 l</span></td>
-          <td>Bouteille de 1,5 l</td>
-          <td class="r">24</td><td class="r">1,05 €</td><td class="r">20 %</td><td class="r">25,20 €</td>
+          <td><span class="code">{{code}}</span></td>
+          <td><span class="item-name">{{designation}}</span></td>
+          <td>{{conditionnement}}</td>
+          <td class="r">{{qty}}</td><td class="r">{{unitPriceHt}}</td><td class="r">{{vatRate}}</td><td class="r">{{lineTotalHt}}</td>
         </tr>
-        <tr>
-          <td><span class="code">00ZZ20</span></td>
-          <td><span class="item-name">Papier cuisson double face 60×40</span><br><span class="item-sub">Carton de 500</span></td>
-          <td>Carton de 500</td>
-          <td class="r">5</td><td class="r">26,74 €</td><td class="r">20 %</td><td class="r">133,70 €</td>
-        </tr>
-        <tr>
-          <td><span class="code">00PA46</span></td>
-          <td><span class="item-name">Sac poubelle 130L fort ×100</span><br><span class="item-sub">Carton de 100</span></td>
-          <td>Carton de 100</td>
-          <td class="r">5</td><td class="r">18,30 €</td><td class="r">20 %</td><td class="r">91,50 €</td>
-        </tr>
-        <tr>
-          <td><span class="code">00KA50</span></td>
-          <td><span class="item-name">Aluminium 200×45 Rech 3 RLX</span><br><span class="item-sub">Rouleau de 200 m</span></td>
-          <td>Rouleau de 200 m</td>
-          <td class="r">6</td><td class="r">21,65 €</td><td class="r">20 %</td><td class="r">129,90 €</td>
-        </tr>
-        <tr>
-          <td><span class="code">00KF03</span></td>
-          <td><span class="item-name">Film étirable 300×45 Bte</span><br><span class="item-sub">Rouleau de 300 m</span></td>
-          <td>Rouleau de 300 m</td>
-          <td class="r">12</td><td class="r">6,88 €</td><td class="r">20 %</td><td class="r">82,56 €</td>
-        </tr>
-        <tr>
-          <td><span class="code">00GP45</span></td>
-          <td><span class="item-name">Bobine 2 plis gaufré ×12</span><br><span class="item-sub">Carton de 12</span></td>
-          <td>Carton de 12</td>
-          <td class="r">2</td><td class="r">15,78 €</td><td class="r">20 %</td><td class="r">31,56 €</td>
-        </tr>
+        {{/each}}
       </tbody>
     </table>
   </div>
 
   <div class="totals-wrap">
     <div class="totals-box">
-      <div class="tot-line"><span class="tot-label">Total HT</span><span>494,42 €</span></div>
-      <div class="tot-line"><span class="tot-label">TVA 20 %</span><span>98,88 €</span></div>
-      <div class="tot-line grand"><span class="tot-label">Total TTC</span><span>593,30 €</span></div>
+      {{#if hasDiscount}}
+      <div class="tot-line"><span class="tot-label">Total HT</span><span>{{totalHtBeforeDiscount}}</span></div>
+      <div class="tot-line"><span class="tot-label">Remise {{discountPct}}</span><span>−{{discountAmount}}</span></div>
+      <div class="tot-line"><span class="tot-label">Total HT remisé</span><span>{{totalHt}}</span></div>
+      {{else}}
+      <div class="tot-line"><span class="tot-label">Total HT</span><span>{{totalHt}}</span></div>
+      {{/if}}
+      {{#each vatBreakdown}}
+      <div class="tot-line"><span class="tot-label">TVA {{rate}}</span><span>{{vat}}</span></div>
+      {{/each}}
+      <div class="tot-line grand"><span class="tot-label">Total TTC</span><span>{{totalTtc}}</span></div>
     </div>
   </div>
 
@@ -191,7 +171,7 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
     <div class="footer-col">
       <div class="f-label">Mentions légales</div>
       <div class="f-note">
-        Lascia Corre Distribution — SARL au capital de 1 000 €<br>
+        Lascia Corre Distribution — SAS au capital de 1 000 €<br>
         Siège : 10, rue de l'Archipel, 20000 Ajaccio<br>
         SIRET 422 310 391 00046 — RCS Ajaccio 925 390 254<br>
         N° TVA intracommunautaire : FR25925390254<br><br>
