@@ -10,6 +10,7 @@ export function UploadForm({ direction }: { direction: Direction }) {
   const [files, setFiles] = useState<File[]>([]);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const addFiles = (incoming: File[]) => {
@@ -31,17 +32,28 @@ export function UploadForm({ direction }: { direction: Direction }) {
   const submit = () => {
     if (files.length === 0) return;
     setError(null);
-    const fd = new FormData();
-    fd.append("direction", direction);
-    for (const f of files) fd.append("files", f);
+    const toUpload = files;
+    setProgress({ done: 0, total: toUpload.length });
     startTransition(async () => {
-      try {
-        await uploadInvoicePdfs(fd);
-        setFiles([]);
-        if (inputRef.current) inputRef.current.value = "";
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+      const failed: string[] = [];
+      for (let i = 0; i < toUpload.length; i++) {
+        const f = toUpload[i];
+        const fd = new FormData();
+        fd.append("direction", direction);
+        fd.append("files", f);
+        try {
+          await uploadInvoicePdfs(fd);
+        } catch (e) {
+          failed.push(`${f.name} : ${e instanceof Error ? e.message : String(e)}`);
+        }
+        setProgress({ done: i + 1, total: toUpload.length });
       }
+      if (failed.length > 0) {
+        setError(`Échec sur ${failed.length} fichier(s) :\n${failed.join("\n")}`);
+      }
+      setFiles([]);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = "";
     });
   };
 
@@ -127,7 +139,9 @@ export function UploadForm({ direction }: { direction: Direction }) {
           className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
         >
           {isPending
-            ? "Traitement…"
+            ? progress
+              ? `Traitement ${progress.done}/${progress.total}…`
+              : "Traitement…"
             : files.length === 0
               ? "Importer (aucun fichier)"
               : `Importer ${files.length} PDF${files.length > 1 ? "s" : ""}`}
