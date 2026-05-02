@@ -21,7 +21,11 @@ export function UploadForm({ direction }: { direction: Direction }) {
       return;
     }
     setError(null);
-    setFiles((prev) => [...prev, ...pdfs]);
+    setFiles((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}`));
+      const fresh = pdfs.filter((f) => !seen.has(`${f.name}:${f.size}`));
+      return [...prev, ...fresh];
+    });
   };
 
   const submit = () => {
@@ -43,9 +47,7 @@ export function UploadForm({ direction }: { direction: Direction }) {
 
   return (
     <div className="grid gap-3">
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
+      <label
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -56,31 +58,31 @@ export function UploadForm({ direction }: { direction: Direction }) {
           setDragOver(false);
           addFiles(Array.from(e.dataTransfer.files));
         }}
-        className={`block w-full rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+        className={`block w-full cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
           dragOver
             ? "border-neutral-500 bg-neutral-50"
             : "border-neutral-300 bg-white hover:border-neutral-500"
         }`}
       >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          multiple
+          onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
+          className="hidden"
+        />
         <div className="text-sm font-medium text-neutral-700">
-          Clique ici pour choisir des PDFs (ou glisse-dépose)
+          Clique ici pour choisir des PDFs (ou glisse-dépose plusieurs fichiers)
         </div>
         <div className="mt-1 text-xs text-neutral-500">
           {direction === "client"
             ? "Factures que TU as émises à tes clients."
-            : "Factures que tu as REÇUES de tes fournisseurs."}
-          {" "}L&apos;extraction LLM prend 5-15s par PDF.
+            : "Factures que tu as REÇUES de tes fournisseurs."}{" "}
+          Cmd/Ctrl+clic dans la fenêtre pour multi-sélection. L&apos;extraction
+          LLM prend 5-15s par PDF.
         </div>
-      </button>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept="application/pdf,.pdf"
-        multiple
-        onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
-        className="hidden"
-      />
+      </label>
 
       {files.length > 0 ? (
         <div className="rounded-lg border border-neutral-200 bg-white p-3">
