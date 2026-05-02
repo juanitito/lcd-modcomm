@@ -29,7 +29,7 @@ const SECTIONS = [
     href: "/accounting/compte-resultat",
     title: "Compte de résultat",
     desc: "Produits / charges / résultat net sur la période.",
-    ready: false,
+    ready: true,
   },
   {
     href: "/accounting/kit",
