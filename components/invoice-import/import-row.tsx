@@ -220,7 +220,8 @@ export function ImportRow({
                 setError(null);
                 startTransition(async () => {
                   try {
-                    await materializeImport(imp.id);
+                    const res = await materializeImport(imp.id);
+                    if (!res.ok) setError(res.error);
                   } catch (err) {
                     setError(err instanceof Error ? err.message : String(err));
                   }
