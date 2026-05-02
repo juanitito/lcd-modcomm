@@ -23,7 +23,7 @@ const SECTIONS = [
     href: "/accounting/pre-bilan",
     title: "Pré-bilan",
     desc: "Actif / passif au 31/12. Document non certifié, à valider avec le comptable.",
-    ready: false,
+    ready: true,
   },
   {
     href: "/accounting/compte-resultat",
