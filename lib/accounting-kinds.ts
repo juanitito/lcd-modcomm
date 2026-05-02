@@ -20,6 +20,18 @@ export const PCG_ACCOUNTS: Record<
     classCode: "6",
     nature: "charge",
   },
+  "401": {
+    label: "Fournisseurs",
+    parentCode: "40",
+    classCode: "4",
+    nature: "tiers",
+  },
+  "411": {
+    label: "Clients",
+    parentCode: "41",
+    classCode: "4",
+    nature: "tiers",
+  },
 };
 
 // Pour ajouter un cas : étendre ce registre + référencer le compte dans
@@ -40,6 +52,26 @@ export const CLASSIFICATION_KINDS = {
     shortLabel: "Carburant ss ticket",
     side: "debit",
     debit: "6061",
+    credit: "512",
+  },
+  // Bank-side d'un avoir reçu d'un fournisseur (le fournisseur nous rembourse).
+  // L'avoir fournisseur lui-même (réduction de la charge initiale) doit être
+  // enregistré séparément en supplierInvoices type=credit_note.
+  supplier_credit_note_refund: {
+    label: "Avoir fournisseur remboursé",
+    shortLabel: "Av. fourn. remb.",
+    side: "credit",
+    debit: "512",
+    credit: "401",
+  },
+  // Bank-side d'un avoir émis à un client (on le rembourse). L'avoir lui-même
+  // (réduction du CA + TVA collectée) doit être enregistré séparément en
+  // invoices type=credit_note.
+  client_credit_note_refund: {
+    label: "Avoir client remboursé",
+    shortLabel: "Av. client remb.",
+    side: "debit",
+    debit: "411",
     credit: "512",
   },
 } as const satisfies Record<
