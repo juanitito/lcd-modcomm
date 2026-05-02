@@ -6,6 +6,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth/session";
 import { db, schema } from "@/lib/db";
+import {
+  writeClientInvoiceIssuanceJE,
+  writeSupplierInvoiceIssuanceJE,
+} from "@/lib/accounting";
 import { extractInvoice } from "@/lib/invoice-extract";
 
 type Direction = "client" | "supplier";
@@ -353,6 +357,8 @@ async function materializeAsClientInvoice(
     })
     .where(eq(schema.invoiceImports.id, imp.id));
 
+  await writeClientInvoiceIssuanceJE(created.id);
+
   return { ok: true };
 }
 
@@ -439,6 +445,8 @@ async function materializeAsSupplierInvoice(
       updatedAt: new Date(),
     })
     .where(eq(schema.invoiceImports.id, imp.id));
+
+  await writeSupplierInvoiceIssuanceJE(created.id);
 
   return { ok: true };
 }

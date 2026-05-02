@@ -1,0 +1,8 @@
+{
+  "_comment": "Mapping produit (par code catalogue) -> taux TVA en %. Override le taux par défaut du produit. À valider avec le comptable. Cas particulier Corse (art. 297 CGI) : denrées alimentaires à 2.1%.",
+  "_default": 20,
+  "_corse_alimentaire_2_1": [
+    "00TA11"
+  ],
+  "00TA11": 2.1
+}

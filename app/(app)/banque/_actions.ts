@@ -12,6 +12,8 @@ import {
   ensurePcgAccountsExist,
   getOrCreatePeriodForDate,
   nextEntryNumber,
+  writeClientInvoicePaymentJE,
+  writeSupplierInvoicePaymentJE,
 } from "@/lib/accounting";
 import { getOrganization, iterateTransactions, toQontoRow } from "@/lib/qonto";
 import { nameMatchScore } from "@/lib/text-match";
@@ -167,14 +169,23 @@ export async function autoMatchTransactions(): Promise<{
         continue;
       }
 
+      const journalEntryId = await writeClientInvoicePaymentJE(tx.id, top.inv.id);
       await db
         .update(schema.qontoTransactions)
         .set({
           matchedInvoiceId: top.inv.id,
+          journalEntryId,
           matchedAt: new Date(),
           matchNote: `Auto-match client (score nom ${top.score.toFixed(2)})`,
         })
         .where(eq(schema.qontoTransactions.id, tx.id));
+      // Marque la facture comme payée si montants alignés
+      if (Math.abs(Number(top.inv.totalTtc) - absAmount) < 0.01) {
+        await db
+          .update(schema.invoices)
+          .set({ status: "paid" })
+          .where(eq(schema.invoices.id, top.inv.id));
+      }
       matched++;
     } else {
       const candidates = allSupplierInvoices
@@ -200,14 +211,22 @@ export async function autoMatchTransactions(): Promise<{
         continue;
       }
 
+      const journalEntryId = await writeSupplierInvoicePaymentJE(tx.id, top.si.id);
       await db
         .update(schema.qontoTransactions)
         .set({
           matchedSupplierInvoiceId: top.si.id,
+          journalEntryId,
           matchedAt: new Date(),
           matchNote: `Auto-match fournisseur (score nom ${top.score.toFixed(2)})`,
         })
         .where(eq(schema.qontoTransactions.id, tx.id));
+      if (Math.abs(Number(top.si.totalTtc) - absAmount) < 0.01) {
+        await db
+          .update(schema.supplierInvoices)
+          .set({ status: "paid" })
+          .where(eq(schema.supplierInvoices.id, top.si.id));
+      }
       matched++;
     }
   }
@@ -232,15 +251,42 @@ export async function setManualMatch(input: { txId: string; invoiceId: string })
   await requireAuth();
   const data = matchClientSchema.parse(input);
 
+  // Génère l'écriture comptable de paiement (BQ : 512 / 411-tier).
+  const journalEntryId = await writeClientInvoicePaymentJE(
+    data.txId,
+    data.invoiceId,
+  );
+
   await db
     .update(schema.qontoTransactions)
     .set({
       matchedInvoiceId: data.invoiceId,
       matchedSupplierInvoiceId: null,
+      journalEntryId,
       matchedAt: new Date(),
       matchNote: "Match manuel client",
     })
     .where(eq(schema.qontoTransactions.id, data.txId));
+
+  // Marque la facture comme payée si le montant correspond
+  const inv = await db.query.invoices.findFirst({
+    where: eq(schema.invoices.id, data.invoiceId),
+    columns: { id: true, totalTtc: true },
+  });
+  const tx = await db.query.qontoTransactions.findFirst({
+    where: eq(schema.qontoTransactions.id, data.txId),
+    columns: { amount: true },
+  });
+  if (
+    inv &&
+    tx &&
+    Math.abs(Number(inv.totalTtc) - Math.abs(Number(tx.amount))) < 0.01
+  ) {
+    await db
+      .update(schema.invoices)
+      .set({ status: "paid" })
+      .where(eq(schema.invoices.id, data.invoiceId));
+  }
 
   revalidatePath("/banque");
 }
@@ -252,15 +298,40 @@ export async function setManualSupplierMatch(input: {
   await requireAuth();
   const data = matchSupplierSchema.parse(input);
 
+  const journalEntryId = await writeSupplierInvoicePaymentJE(
+    data.txId,
+    data.supplierInvoiceId,
+  );
+
   await db
     .update(schema.qontoTransactions)
     .set({
       matchedSupplierInvoiceId: data.supplierInvoiceId,
       matchedInvoiceId: null,
+      journalEntryId,
       matchedAt: new Date(),
       matchNote: "Match manuel fournisseur",
     })
     .where(eq(schema.qontoTransactions.id, data.txId));
+
+  const inv = await db.query.supplierInvoices.findFirst({
+    where: eq(schema.supplierInvoices.id, data.supplierInvoiceId),
+    columns: { id: true, totalTtc: true },
+  });
+  const tx = await db.query.qontoTransactions.findFirst({
+    where: eq(schema.qontoTransactions.id, data.txId),
+    columns: { amount: true },
+  });
+  if (
+    inv &&
+    tx &&
+    Math.abs(Number(inv.totalTtc) - Math.abs(Number(tx.amount))) < 0.01
+  ) {
+    await db
+      .update(schema.supplierInvoices)
+      .set({ status: "paid" })
+      .where(eq(schema.supplierInvoices.id, data.supplierInvoiceId));
+  }
 
   revalidatePath("/banque");
 }
