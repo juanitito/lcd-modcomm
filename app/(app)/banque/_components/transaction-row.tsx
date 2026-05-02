@@ -10,7 +10,7 @@ import {
 import {
   CLASSIFICATION_KINDS_BY_SIDE,
   type ClassificationKind,
-} from "@/lib/accounting";
+} from "@/lib/accounting-kinds";
 import { formatEur } from "@/lib/format";
 
 type TxRow = {
