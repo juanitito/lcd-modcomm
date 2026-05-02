@@ -7,6 +7,7 @@
 
 import { and, asc, eq, gte, like, lte } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { getExercicePeriod } from "@/lib/accounting";
 
 // ============================================================================
 // Helpers de base
@@ -171,15 +172,17 @@ export async function computeBilanFormel(
   exercice: number,
   capitalSocial = 1000,
 ): Promise<BilanFormel> {
-  const closing = `${exercice}-12-31`;
-  const closingN1 = `${exercice - 1}-12-31`;
+  const periodN = await getExercicePeriod(exercice);
+  const periodN1 = await getExercicePeriod(exercice - 1);
+  const closing = periodN.endDate;
+  const closingN1 = periodN1.endDate;
   const [balN, balN1] = await Promise.all([
     balancesAtDate(closing),
     balancesAtDate(closingN1),
   ]);
   const [crN, crN1] = await Promise.all([
-    computeCompteResultat(`${exercice}-01-01`, closing).then((c) => c.resultat),
-    computeCompteResultat(`${exercice - 1}-01-01`, closingN1).then((c) => c.resultat),
+    computeCompteResultat(periodN.startDate, closing).then((c) => c.resultat),
+    computeCompteResultat(periodN1.startDate, closingN1).then((c) => c.resultat),
   ]);
 
   // ACTIF
@@ -393,10 +396,12 @@ export type CompteResultatFormel = {
 export async function computeCompteResultatFormel(
   exercice: number,
 ): Promise<CompteResultatFormel> {
-  const fromN = `${exercice}-01-01`;
-  const toN = `${exercice}-12-31`;
-  const fromN1 = `${exercice - 1}-01-01`;
-  const toN1 = `${exercice - 1}-12-31`;
+  const periodN = await getExercicePeriod(exercice);
+  const periodN1 = await getExercicePeriod(exercice - 1);
+  const fromN = periodN.startDate;
+  const toN = periodN.endDate;
+  const fromN1 = periodN1.startDate;
+  const toN1 = periodN1.endDate;
 
   const [perN, perN1, baseCR] = await Promise.all([
     periodBalances(fromN, toN),

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FilterSelect } from "@/components/filter-select";
 import { computeTvaForYear, distinctRates } from "@/lib/tva";
+import { getExercicePeriod } from "@/lib/accounting";
 
 type SP = Promise<{ exercice?: string }>;
 
@@ -18,6 +19,11 @@ export default async function TvaPage({
   const year = Number.parseInt(exercice, 10);
 
   const { months, yearly } = await computeTvaForYear(year);
+  const period = await getExercicePeriod(year);
+  const fmtFr = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
   const rates = distinctRates(months);
   const ratesPretty = rates.map((r) =>
     Number.isInteger(Number(r))
@@ -43,8 +49,9 @@ export default async function TvaPage({
             </Link>{" "}
             / TVA
           </p>
-          <h1 className="mt-1 text-2xl font-semibold">TVA — {exercice}</h1>
+          <h1 className="mt-1 text-2xl font-semibold">TVA — Exercice {exercice}</h1>
           <p className="mt-1 text-sm text-neutral-600">
+            Période {fmtFr(period.startDate)} – {fmtFr(period.endDate)}.
             Ventilation par mois × taux. LCD applique 20 % à toutes ses
             ventes. Lecture du taux par ligne de facture (vatBreakdown) — la
             structure supporte d'autres taux si une facture les contient.
