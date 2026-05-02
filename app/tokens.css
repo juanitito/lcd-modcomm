@@ -1,0 +1,113 @@
+/* ============================================================
+   LCD ModComm — Design Tokens
+   styles/tokens.css
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ── Typographie ── */
+  --font-sans: 'DM Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'DM Mono', 'Fira Code', monospace;
+
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 14px;
+  --text-md:   16px;
+  --text-lg:   20px;
+  --text-xl:   28px;
+
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold: 600;
+
+  --leading-tight:  1.25;
+  --leading-snug:   1.4;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight:  -0.01em;
+  --tracking-wide:    0.06em;
+  --tracking-wider:   0.10em;
+  --tracking-widest:  0.12em;
+
+  /* ── Couleurs Blue (principal) ── */
+  --blue-50:  #EBF4FF;
+  --blue-100: #C8E2FA;
+  --blue-200: #92C3F2;
+  --blue-400: #3B8BD4;
+  --blue-500: #2572BB;   /* → texte chiffres, CTA primaire */
+  --blue-600: #185FA5;   /* → sidebar, liens actifs        */
+  --blue-700: #0F4A88;
+  --blue-800: #0C3870;
+  --blue-900: #07224A;
+
+  /* ── Couleurs Slate (neutre) ── */
+  --slate-50:  #F5F8FC;  /* → fond page                */
+  --slate-100: #E8EEF6;  /* → fond cards, séparateurs  */
+  --slate-200: #CDD8E8;  /* → bordures                 */
+  --slate-400: #8FA5C0;  /* → texte placeholder, labels */
+  --slate-600: #4E6A8A;  /* → texte secondaire          */
+  --slate-800: #1E3450;  /* → texte principal           */
+  --slate-900: #0D1F35;
+
+  /* ── Couleurs Sky (accent léger) ── */
+  --sky-50:  #F0F9FF;
+  --sky-200: #BAE6FD;
+  --sky-400: #38BDF8;
+  --sky-600: #0284C7;
+
+  /* ── Sémantique ── */
+  --success-bg:     #F0FDF4;
+  --success-text:   #16A34A;
+  --success-border: #BBF7D0;
+
+  --warning-bg:     #FFFBEB;
+  --warning-text:   #D97706;
+  --warning-border: #FDE68A;
+
+  --danger-bg:      #FEF2F2;
+  --danger-text:    #DC2626;
+  --danger-border:  #FECACA;
+
+  --info-bg:        var(--blue-50);
+  --info-text:      var(--blue-500);
+  --info-border:    var(--blue-200);
+
+  --neutral-bg:     var(--slate-100);
+  --neutral-text:   var(--slate-600);
+  --neutral-border: var(--slate-200);
+
+  /* ── Rayons ── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+  --radius-full: 9999px;
+
+  /* ── Espacements (base 4px) ── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Ombres ── */
+  --shadow-sm: 0 1px 3px rgba(18,52,95,.07), 0 1px 2px rgba(18,52,95,.04);
+  --shadow-md: 0 4px 12px rgba(18,52,95,.10), 0 2px 6px rgba(18,52,95,.06);
+
+  /* ── Transitions ── */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+
+  /* ── Z-index ── */
+  --z-base:    0;
+  --z-raised:  10;
+  --z-dropdown: 100;
+  --z-modal:   200;
+  --z-toast:   300;
+}
