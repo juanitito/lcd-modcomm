@@ -141,9 +141,38 @@ export async function nextEntryNumber(
 
 export async function deleteJournalEntry(entryId: string) {
   // journalLines ont onDelete:cascade → suppression atomique côté DB.
+  // Pour les écritures avec un enfant (cas du pattern OD constatation +
+  // BQ règlement), on supprime aussi l'enfant rattaché par parent_entry_id.
+  const children = await db
+    .select({ id: schema.journalEntries.id })
+    .from(schema.journalEntries)
+    .where(eq(schema.journalEntries.parentEntryId, entryId));
+  for (const c of children) {
+    await db.delete(schema.journalLines).where(eq(schema.journalLines.entryId, c.id));
+    await db.delete(schema.journalEntries).where(eq(schema.journalEntries.id, c.id));
+  }
   await db
     .delete(schema.journalEntries)
     .where(eq(schema.journalEntries.id, entryId));
+}
+
+// ============================================================================
+// Comptes admis dans une écriture pure du journal BQ
+// ============================================================================
+
+/**
+ * Renvoie true si le compte est admis dans une écriture banque "pure"
+ * (sans nécessiter une constatation préalable en OD).
+ * Acceptés : 512 (banque), tiers (411-*, 401-*), 455 (CCA), 467 (transit),
+ *            4191 / 4091 (avances).
+ * Refusés : tout compte de classe 6 (charges) ou 7 (produits) — la
+ * constatation doit alors passer par OD via 467.
+ */
+export function isBqAccount(code: string): boolean {
+  if (code === "512" || code === "467") return true;
+  if (code.startsWith("411") || code.startsWith("401")) return true;
+  if (code === "455" || code === "4191" || code === "4091") return true;
+  return false;
 }
 
 // ============================================================================

@@ -97,6 +97,12 @@ export const PCG_ACCOUNTS: Record<
     classCode: "7",
     nature: "produit",
   },
+  "467": {
+    label: "Autres débiteurs et créditeurs divers",
+    parentCode: "46",
+    classCode: "4",
+    nature: "tiers",
+  },
 };
 
 // Pour ajouter un cas : étendre ce registre + référencer le compte dans
