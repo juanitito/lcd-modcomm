@@ -6,6 +6,8 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth/session";
 import { db, schema } from "@/lib/db";
 import {
+  CLASSIFICATION_KINDS,
+  type ClassificationKind,
   deleteJournalEntry,
   ensurePcgAccountsExist,
   getOrCreatePeriodForDate,
@@ -295,18 +297,30 @@ export async function clearMatch(txId: string) {
   revalidatePath("/banque");
 }
 
-// ---------- Classification non-facture : avance en compte courant d'associé ----------
+// ---------- Classification non-facture (multi-kinds) ----------
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-export async function classifyAsOwnerAdvance(
-  txId: string,
-): Promise<ActionResult> {
+const classifySchema = z.object({
+  txId: z.string().uuid(),
+  kind: z.enum(
+    Object.keys(CLASSIFICATION_KINDS) as [
+      ClassificationKind,
+      ...ClassificationKind[],
+    ],
+  ),
+});
+
+export async function classifyTransaction(input: {
+  txId: string;
+  kind: ClassificationKind;
+}): Promise<ActionResult> {
   await requireAuth();
-  const id = idSchema.parse(txId);
+  const data = classifySchema.parse(input);
+  const def = CLASSIFICATION_KINDS[data.kind];
 
   const tx = await db.query.qontoTransactions.findFirst({
-    where: eq(schema.qontoTransactions.id, id),
+    where: eq(schema.qontoTransactions.id, data.txId),
   });
   if (!tx) return { ok: false, error: "Transaction introuvable." };
   if (tx.matchedInvoiceId || tx.matchedSupplierInvoiceId) {
@@ -316,10 +330,19 @@ export async function classifyAsOwnerAdvance(
     return { ok: false, error: "Transaction déjà classée." };
   }
   const amount = Number(tx.amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
+  if (!Number.isFinite(amount) || amount === 0) {
+    return { ok: false, error: "Montant invalide." };
+  }
+  if (def.side === "credit" && amount <= 0) {
     return {
       ok: false,
-      error: "L'avance en compte courant d'associé doit être un crédit (montant > 0).",
+      error: `${def.label} : attendu un crédit (montant > 0).`,
+    };
+  }
+  if (def.side === "debit" && amount >= 0) {
+    return {
+      ok: false,
+      error: `${def.label} : attendu un débit (montant < 0).`,
     };
   }
 
@@ -330,9 +353,9 @@ export async function classifyAsOwnerAdvance(
   const entryNumber = await nextEntryNumber(txDate, "BQ");
 
   const counterparty = tx.counterpartyName ?? tx.label ?? "—";
-  const label = `Avance compte courant associé — ${counterparty}`;
+  const label = `${def.label} — ${counterparty}`;
   const dateIso = txDate.toISOString().slice(0, 10);
-  const amountStr = amount.toFixed(2);
+  const absAmountStr = Math.abs(amount).toFixed(2);
 
   const [entry] = await db
     .insert(schema.journalEntries)
@@ -349,18 +372,18 @@ export async function classifyAsOwnerAdvance(
   await db.insert(schema.journalLines).values([
     {
       entryId: entry.id,
-      accountCode: "512",
+      accountCode: def.debit,
       label,
-      debit: amountStr,
+      debit: absAmountStr,
       credit: "0.00",
       position: 0,
     },
     {
       entryId: entry.id,
-      accountCode: "455",
+      accountCode: def.credit,
       label,
       debit: "0.00",
-      credit: amountStr,
+      credit: absAmountStr,
       position: 1,
     },
   ]);
@@ -370,9 +393,9 @@ export async function classifyAsOwnerAdvance(
     .set({
       journalEntryId: entry.id,
       matchedAt: new Date(),
-      matchNote: "Classé : avance CCA (512/455)",
+      matchNote: `Classé : ${def.shortLabel} (${def.debit}/${def.credit})`,
     })
-    .where(eq(schema.qontoTransactions.id, id));
+    .where(eq(schema.qontoTransactions.id, data.txId));
 
   revalidatePath("/banque");
   return { ok: true };

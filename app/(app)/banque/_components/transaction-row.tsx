@@ -5,8 +5,12 @@ import {
   setManualMatch,
   setManualSupplierMatch,
   clearMatch,
-  classifyAsOwnerAdvance,
+  classifyTransaction,
 } from "../_actions";
+import {
+  CLASSIFICATION_KINDS_BY_SIDE,
+  type ClassificationKind,
+} from "@/lib/accounting";
 import { formatEur } from "@/lib/format";
 
 type TxRow = {
@@ -53,6 +57,8 @@ export function TransactionRow({
     tx.matchedInvoiceId || tx.matchedSupplierInvoiceId;
   const isClassified = !!tx.journalEntryId;
   const isTraced = isInvoiceMatched || isClassified;
+  const classificationKinds =
+    CLASSIFICATION_KINDS_BY_SIDE[isCredit ? "credit" : "debit"];
   const matchedNumber =
     tx.matchedInvoiceNumber ?? tx.matchedSupplierInvoiceNumber;
   const matchedTotal =
@@ -97,7 +103,8 @@ export function TransactionRow({
                 className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700"
                 title={tx.journalEntryLabel ?? undefined}
               >
-                ✓ Avance CCA · {tx.journalEntryNumber}
+                ✓ {tx.journalEntryLabel?.split(" — ")[0] ?? "Classé"} ·{" "}
+                {tx.journalEntryNumber}
               </span>
             )}
             {mismatch ? (
@@ -130,91 +137,100 @@ export function TransactionRow({
               <span className="text-xs text-neutral-400">{tx.matchNote}</span>
             ) : null}
           </div>
-        ) : isCredit ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              disabled={isPending}
-              defaultValue=""
-              onChange={(e) => {
-                const invoiceId = e.target.value;
-                if (!invoiceId) return;
-                setError(null);
-                startTransition(async () => {
-                  try {
-                    await setManualMatch({ txId: tx.id, invoiceId });
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : String(err));
-                  }
-                });
-              }}
-              className="input max-w-md text-xs"
-            >
-              <option value="">— rapprocher avec une facture client —</option>
-              {invoiceOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => {
-                if (
-                  !confirm(
-                    "Classer comme avance en compte courant d'associé ?\nCréera l'écriture : 512 (débit) / 455 (crédit).",
-                  )
-                ) {
-                  return;
-                }
-                setError(null);
-                startTransition(async () => {
-                  try {
-                    const res = await classifyAsOwnerAdvance(tx.id);
-                    if (!res.ok) setError(res.error);
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : String(err));
-                  }
-                });
-              }}
-              className="rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs text-indigo-700 hover:border-indigo-500 disabled:opacity-50"
-              title="Avance en compte courant d'associé : Débit 512 / Crédit 455"
-            >
-              Avance assoc.
-            </button>
-          </div>
         ) : (
-          <select
-            disabled={isPending}
-            defaultValue=""
-            onChange={(e) => {
-              const supplierInvoiceId = e.target.value;
-              if (!supplierInvoiceId) return;
-              setError(null);
-              startTransition(async () => {
-                try {
-                  await setManualSupplierMatch({
-                    txId: tx.id,
-                    supplierInvoiceId,
+          <div className="flex flex-wrap items-center gap-2">
+            {isCredit ? (
+              <select
+                disabled={isPending}
+                defaultValue=""
+                onChange={(e) => {
+                  const invoiceId = e.target.value;
+                  if (!invoiceId) return;
+                  setError(null);
+                  startTransition(async () => {
+                    try {
+                      await setManualMatch({ txId: tx.id, invoiceId });
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : String(err));
+                    }
                   });
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : String(err));
-                }
-              });
-            }}
-            className="input max-w-md text-xs"
-          >
-            <option value="">
-              {supplierInvoiceOptions.length === 0
-                ? "— pas encore de factures fournisseurs —"
-                : "— rapprocher avec une facture fournisseur —"}
-            </option>
-            {supplierInvoiceOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+                }}
+                className="input max-w-md text-xs"
+              >
+                <option value="">— rapprocher avec une facture client —</option>
+                {invoiceOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                disabled={isPending}
+                defaultValue=""
+                onChange={(e) => {
+                  const supplierInvoiceId = e.target.value;
+                  if (!supplierInvoiceId) return;
+                  setError(null);
+                  startTransition(async () => {
+                    try {
+                      await setManualSupplierMatch({
+                        txId: tx.id,
+                        supplierInvoiceId,
+                      });
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : String(err));
+                    }
+                  });
+                }}
+                className="input max-w-md text-xs"
+              >
+                <option value="">
+                  {supplierInvoiceOptions.length === 0
+                    ? "— pas encore de factures fournisseurs —"
+                    : "— rapprocher avec une facture fournisseur —"}
+                </option>
+                {supplierInvoiceOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            {classificationKinds.length > 0 ? (
+              <select
+                disabled={isPending}
+                defaultValue=""
+                onChange={(e) => {
+                  const kind = e.target.value as ClassificationKind | "";
+                  if (!kind) return;
+                  setError(null);
+                  // Reset le select pour permettre une nouvelle action si erreur.
+                  e.target.value = "";
+                  startTransition(async () => {
+                    try {
+                      const res = await classifyTransaction({
+                        txId: tx.id,
+                        kind,
+                      });
+                      if (!res.ok) setError(res.error);
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : String(err));
+                    }
+                  });
+                }}
+                className="input max-w-xs border-indigo-200 bg-indigo-50 text-xs text-indigo-700"
+                title="Classifier sans facture (écriture comptable)"
+              >
+                <option value="">— classer comme… —</option>
+                {classificationKinds.map((k) => (
+                  <option key={k.key} value={k.key}>
+                    {k.shortLabel}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
         )}
         {error ? <div className="text-xs text-red-600">{error}</div> : null}
       </td>
