@@ -32,6 +32,12 @@ export const PCG_ACCOUNTS: Record<
     classCode: "4",
     nature: "tiers",
   },
+  "6788": {
+    label: "Autres charges exceptionnelles",
+    parentCode: "678",
+    classCode: "6",
+    nature: "charge",
+  },
 };
 
 // Pour ajouter un cas : étendre ce registre + référencer le compte dans
@@ -72,6 +78,17 @@ export const CLASSIFICATION_KINDS = {
     shortLabel: "Av. client remb.",
     side: "debit",
     debit: "411",
+    credit: "512",
+  },
+  // Pénalité commerciale ponctuelle (refus de prélèvement, frais de
+  // recouvrement, etc.) facturée par un fournisseur. Utilisable seul
+  // (avec une tx dédiée à la pénalité) ou en split d'une tx mixte
+  // paiement + pénalité.
+  supplier_penalty: {
+    label: "Pénalité fournisseur",
+    shortLabel: "Pénalité fourn.",
+    side: "debit",
+    debit: "6788",
     credit: "512",
   },
 } as const satisfies Record<

@@ -400,3 +400,231 @@ export async function classifyTransaction(input: {
   revalidatePath("/banque");
   return { ok: true };
 }
+
+// ---------- Split d'une transaction sur plusieurs destinations ----------
+
+const splitTargetSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("supplier_invoice"), id: z.string().uuid() }),
+  z.object({ type: z.literal("client_invoice"), id: z.string().uuid() }),
+  z.object({
+    type: z.literal("kind"),
+    key: z.enum(
+      Object.keys(CLASSIFICATION_KINDS) as [
+        ClassificationKind,
+        ...ClassificationKind[],
+      ],
+    ),
+  }),
+]);
+
+const splitSchema = z.object({
+  txId: z.string().uuid(),
+  splits: z
+    .array(
+      z.object({
+        amount: z.number().positive(),
+        target: splitTargetSchema,
+      }),
+    )
+    .min(2),
+});
+
+export async function splitTransaction(input: {
+  txId: string;
+  splits: Array<{
+    amount: number;
+    target:
+      | { type: "supplier_invoice"; id: string }
+      | { type: "client_invoice"; id: string }
+      | { type: "kind"; key: ClassificationKind };
+  }>;
+}): Promise<ActionResult> {
+  await requireAuth();
+  const data = splitSchema.parse(input);
+
+  const tx = await db.query.qontoTransactions.findFirst({
+    where: eq(schema.qontoTransactions.id, data.txId),
+  });
+  if (!tx) return { ok: false, error: "Transaction introuvable." };
+  if (tx.matchedInvoiceId || tx.matchedSupplierInvoiceId || tx.journalEntryId) {
+    return {
+      ok: false,
+      error: "Transaction déjà rapprochée ou classée — délier d'abord.",
+    };
+  }
+
+  const txAmount = Number(tx.amount);
+  if (!Number.isFinite(txAmount) || txAmount === 0) {
+    return { ok: false, error: "Montant transaction invalide." };
+  }
+  const txAbs = Math.abs(txAmount);
+  const direction: "credit" | "debit" = txAmount > 0 ? "credit" : "debit";
+
+  const sumSplits = data.splits.reduce((s, x) => s + x.amount, 0);
+  if (Math.abs(sumSplits - txAbs) > 0.01) {
+    return {
+      ok: false,
+      error: `Somme des splits ${sumSplits.toFixed(2)} ≠ |montant tx| ${txAbs.toFixed(2)}.`,
+    };
+  }
+
+  // Préparer les lignes : pour chaque split, déterminer le compte non-512
+  // (l'autre compte de la classification ou 401/411 selon la cible facture).
+  type LineSpec = {
+    accountCode: string;
+    label: string;
+    matchedInvoiceId: string | null;
+    matchedSupplierInvoiceId: string | null;
+    amount: number;
+  };
+
+  const lineSpecs: LineSpec[] = [];
+  for (const s of data.splits) {
+    if (s.target.type === "supplier_invoice") {
+      // Sur paiement fournisseur : tx debit, compte 401 débité.
+      if (direction !== "debit") {
+        return {
+          ok: false,
+          error: "Un paiement fournisseur doit être sur une tx débit.",
+        };
+      }
+      const inv = await db.query.supplierInvoices.findFirst({
+        where: eq(schema.supplierInvoices.id, s.target.id),
+      });
+      if (!inv) {
+        return { ok: false, error: `Facture fournisseur ${s.target.id} introuvable.` };
+      }
+      lineSpecs.push({
+        accountCode: "401",
+        label: `Paiement facture ${inv.supplierInvoiceNumber}`,
+        matchedInvoiceId: null,
+        matchedSupplierInvoiceId: inv.id,
+        amount: s.amount,
+      });
+    } else if (s.target.type === "client_invoice") {
+      if (direction !== "credit") {
+        return {
+          ok: false,
+          error: "Un encaissement client doit être sur une tx crédit.",
+        };
+      }
+      const inv = await db.query.invoices.findFirst({
+        where: eq(schema.invoices.id, s.target.id),
+      });
+      if (!inv) {
+        return { ok: false, error: `Facture client ${s.target.id} introuvable.` };
+      }
+      lineSpecs.push({
+        accountCode: "411",
+        label: `Encaissement facture ${inv.invoiceNumber}`,
+        matchedInvoiceId: inv.id,
+        matchedSupplierInvoiceId: null,
+        amount: s.amount,
+      });
+    } else {
+      const def = CLASSIFICATION_KINDS[s.target.key];
+      if (def.side !== direction) {
+        return {
+          ok: false,
+          error: `Le kind ${def.label} demande un sens ${def.side}, tx en ${direction}.`,
+        };
+      }
+      // Compte non-512 : si tx débit, c'est def.debit ; si tx crédit, c'est
+      // def.credit. (L'autre côté est toujours 512 par construction de nos
+      // kinds actuels — assertions visuelles dans accounting-kinds.ts.)
+      const counterAccount = direction === "debit" ? def.debit : def.credit;
+      lineSpecs.push({
+        accountCode: counterAccount,
+        label: def.label,
+        matchedInvoiceId: null,
+        matchedSupplierInvoiceId: null,
+        amount: s.amount,
+      });
+    }
+  }
+
+  await ensurePcgAccountsExist();
+
+  const txDate = tx.settledAt ?? new Date(tx.date);
+  const period = await getOrCreatePeriodForDate(txDate);
+  const entryNumber = await nextEntryNumber(txDate, "BQ");
+  const counterparty = tx.counterpartyName ?? tx.label ?? "—";
+  const entryLabel = `Split — ${counterparty}`;
+  const dateIso = txDate.toISOString().slice(0, 10);
+
+  const [entry] = await db
+    .insert(schema.journalEntries)
+    .values({
+      periodId: period.id,
+      entryNumber,
+      date: dateIso,
+      journal: "BQ",
+      label: entryLabel,
+      status: "draft",
+    })
+    .returning({ id: schema.journalEntries.id });
+
+  // Lignes ventilation (côté opposé à 512) puis ligne 512 récapitulative.
+  const lineRows = lineSpecs.map((spec, i) => ({
+    entryId: entry.id,
+    accountCode: spec.accountCode,
+    label: spec.label,
+    debit: direction === "debit" ? spec.amount.toFixed(2) : "0.00",
+    credit: direction === "debit" ? "0.00" : spec.amount.toFixed(2),
+    position: i,
+    matchedInvoiceId: spec.matchedInvoiceId,
+    matchedSupplierInvoiceId: spec.matchedSupplierInvoiceId,
+  }));
+  lineRows.push({
+    entryId: entry.id,
+    accountCode: "512",
+    label: entryLabel,
+    debit: direction === "debit" ? "0.00" : txAbs.toFixed(2),
+    credit: direction === "debit" ? txAbs.toFixed(2) : "0.00",
+    position: lineSpecs.length,
+    matchedInvoiceId: null,
+    matchedSupplierInvoiceId: null,
+  });
+  await db.insert(schema.journalLines).values(lineRows);
+
+  // Lier la tx à l'écriture.
+  await db
+    .update(schema.qontoTransactions)
+    .set({
+      journalEntryId: entry.id,
+      matchedAt: new Date(),
+      matchNote: `Split ${data.splits.length} ligne(s)`,
+    })
+    .where(eq(schema.qontoTransactions.id, data.txId));
+
+  // Marquer chaque facture liée comme payée si le split = total.
+  for (const spec of lineSpecs) {
+    if (spec.matchedSupplierInvoiceId) {
+      const inv = await db.query.supplierInvoices.findFirst({
+        where: eq(schema.supplierInvoices.id, spec.matchedSupplierInvoiceId),
+        columns: { id: true, totalTtc: true, status: true },
+      });
+      if (inv && Math.abs(Number(inv.totalTtc) - spec.amount) < 0.01) {
+        await db
+          .update(schema.supplierInvoices)
+          .set({ status: "paid" })
+          .where(eq(schema.supplierInvoices.id, inv.id));
+      }
+    }
+    if (spec.matchedInvoiceId) {
+      const inv = await db.query.invoices.findFirst({
+        where: eq(schema.invoices.id, spec.matchedInvoiceId),
+        columns: { id: true, totalTtc: true, status: true },
+      });
+      if (inv && Math.abs(Number(inv.totalTtc) - spec.amount) < 0.01) {
+        await db
+          .update(schema.invoices)
+          .set({ status: "paid" })
+          .where(eq(schema.invoices.id, inv.id));
+      }
+    }
+  }
+
+  revalidatePath("/banque");
+  return { ok: true };
+}

@@ -456,6 +456,12 @@ export const journalLines = pgTable("journal_lines", {
   debit: numeric("debit", { precision: 14, scale: 2 }).notNull().default("0.00"),
   credit: numeric("credit", { precision: 14, scale: 2 }).notNull().default("0.00"),
   position: integer("position").notNull().default(0),
+  // Lien optionnel : la ligne solde tout ou partie d'une facture concrète.
+  // Utilisé par les écritures issues d'un split de tx Qonto.
+  matchedInvoiceId: uuid("matched_invoice_id").references(() => invoices.id),
+  matchedSupplierInvoiceId: uuid("matched_supplier_invoice_id").references(
+    () => supplierInvoices.id,
+  ),
 });
 
 // =====================================================================
