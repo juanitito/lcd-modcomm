@@ -8,6 +8,7 @@
 
 import { and, asc, between, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { getExercicePeriod } from "@/lib/accounting";
 
 export type TvaMonth = {
   monthKey: string; // "2025-01"
@@ -47,12 +48,16 @@ export async function computeTvaForYear(year: number): Promise<{
     net: number;
   };
 }> {
-  const fromDate = `${year}-01-01`;
-  const toDate = `${year}-12-31`;
+  const period = await getExercicePeriod(year);
+  const fromDate = period.startDate;
+  const toDate = period.endDate;
 
-  // Initialiser les 12 mois vides
+  // Initialiser les mois inclus dans l'exercice (ex. exercice 2024 commence
+  // au 05/03 → on n'initialise pas Jan/Fév 2024).
+  const startMonth = Number.parseInt(period.startDate.slice(5, 7), 10) - 1;
+  const endMonth = Number.parseInt(period.endDate.slice(5, 7), 10) - 1;
   const monthsMap = new Map<string, TvaMonth>();
-  for (let m = 0; m < 12; m++) {
+  for (let m = startMonth; m <= endMonth; m++) {
     const key = `${year}-${(m + 1).toString().padStart(2, "0")}`;
     monthsMap.set(key, {
       monthKey: key,

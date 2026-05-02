@@ -90,6 +90,43 @@ export async function ensurePcgAccountsExist() {
   }
 }
 
+/**
+ * Date de création de la SAS Lascia Corre Distribution.
+ * L'exercice 2024 démarre à cette date (et non au 1er janvier).
+ */
+export const COMPANY_START_DATE = "2024-03-05";
+
+/**
+ * Renvoie les bornes de l'exercice comptable pour une année donnée.
+ * Lit la période existante en DB si elle a été créée, sinon renvoie
+ * les bornes calendaires (avec ajustement pour l'année de création).
+ */
+export async function getExercicePeriod(
+  year: number,
+): Promise<{ startDate: string; endDate: string; label: string }> {
+  const period = await db.query.accountingPeriods.findFirst({
+    where: and(
+      gte(schema.accountingPeriods.startDate, `${year}-01-01`),
+      lte(schema.accountingPeriods.endDate, `${year}-12-31`),
+    ),
+  });
+  if (period) {
+    return {
+      startDate: period.startDate,
+      endDate: period.endDate,
+      label: period.label,
+    };
+  }
+  // Période non créée : bornes calendaires, ajustées pour l'année de création
+  const startDate =
+    year === 2024 ? COMPANY_START_DATE : `${year}-01-01`;
+  return {
+    startDate,
+    endDate: `${year}-12-31`,
+    label: `Exercice ${year}`,
+  };
+}
+
 export async function getOrCreatePeriodForDate(
   date: Date,
 ): Promise<typeof schema.accountingPeriods.$inferSelect> {
@@ -103,10 +140,12 @@ export async function getOrCreatePeriodForDate(
   if (found) return found;
 
   const year = date.getUTCFullYear();
+  const startDate =
+    year === 2024 ? COMPANY_START_DATE : `${year}-01-01`;
   const [created] = await db
     .insert(schema.accountingPeriods)
     .values({
-      startDate: `${year}-01-01`,
+      startDate,
       endDate: `${year}-12-31`,
       label: `Exercice ${year}`,
       status: "open",

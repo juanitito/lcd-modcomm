@@ -4,6 +4,7 @@ import {
   computeCompteResultatFormel,
   type CompteResultatRow,
 } from "@/lib/bilan";
+import { getExercicePeriod } from "@/lib/accounting";
 
 type SP = Promise<{ exercice?: string }>;
 
@@ -69,6 +70,11 @@ export default async function CompteResultatPage({
   const exYear = Number.parseInt(exercice, 10);
 
   const cr = await computeCompteResultatFormel(exYear);
+  const period = await getExercicePeriod(exYear);
+  const fmtFr = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
 
   const exerciceOptions = ["2024", "2025", "2026"].map((y) => ({
     value: y,
@@ -90,7 +96,7 @@ export default async function CompteResultatPage({
           </h1>
           <p className="mt-1 text-sm text-neutral-600">
             Lascia Corre Distribution — SAS au capital de 1 000 € — SIRET 422
-            310 391 00046 — Période 01/01/{exYear} – 31/12/{exYear}.
+            310 391 00046 — Période {fmtFr(period.startDate)} – {fmtFr(period.endDate)}.
           </p>
           <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
             ⚠ <strong>Document non certifié.</strong> À valider par
