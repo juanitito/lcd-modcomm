@@ -31,6 +31,8 @@ data/legacy-excel/*.xlsx
 /regenerated-invoices/
 # Legacy PDFs téléchargés depuis Vercel Blob pour comparaison
 /legacy-invoices/
+# Dossier scratch local
+/tmp/
 
 # debug
 npm-debug.log*
