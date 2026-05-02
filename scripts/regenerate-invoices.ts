@@ -80,6 +80,28 @@ function fmtVatRate(rate: number | string): string {
   return Number.isInteger(num) ? `${num} %` : `${num.toString().replace(".", ",")} %`;
 }
 
+/**
+ * Construit le nom de fichier PDF d'une facture.
+ * Format : YYMMDD-LCD-Facture {client}.pdf
+ * Quand plusieurs factures même jour même client, on suffixe avec le numéro
+ * intra-jour entre parenthèses pour éviter les collisions.
+ */
+function buildPdfFilename(
+  invoiceNumber: string,
+  clientName: string,
+): string {
+  // invoiceNumber = "YYYYMMDD-NN"
+  const [yyyymmdd, nn] = invoiceNumber.split("-");
+  const yymmdd = yyyymmdd.slice(2);
+  const seq = Number.parseInt(nn, 10);
+  const safeClient = clientName
+    .replace(/[\/\\<>:"|?*\x00-\x1f]/g, "")
+    .trim()
+    .slice(0, 80);
+  const base = `${yymmdd}-LCD-Facture ${safeClient}`;
+  return seq === 1 ? `${base}.pdf` : `${base} (${seq}).pdf`;
+}
+
 async function main() {
   const { db, schema } = await import("../lib/db");
   const { eq, asc } = await import("drizzle-orm");
@@ -211,10 +233,11 @@ async function main() {
       const pdfBuf = await page.pdf({ format: "A4", printBackground: true });
       await page.close();
 
-      const pdfPath = path.join(outDir, `${newNumber}.pdf`);
+      const filename = buildPdfFilename(newNumber, data.client.name);
+      const pdfPath = path.join(outDir, filename);
       await fs.writeFile(pdfPath, pdfBuf);
       console.log(
-        `  ✓ ${newNumber}  ${inv.issueDate}  ${inv.totalTtc}€  → ${pdfPath} (legacy: ${inv.legacyNumber})`,
+        `  ✓ ${newNumber}  ${inv.issueDate}  ${inv.totalTtc}€  → ${filename} (legacy: ${inv.legacyNumber})`,
       );
 
       commitPlan.push({ id: inv.id, newNumber, pdfPath });
@@ -240,7 +263,7 @@ async function main() {
 
   for (const c of commitPlan) {
     const pdfBuf = await fs.readFile(c.pdfPath);
-    const blobPath = `invoices/regenerated/${c.newNumber}.pdf`;
+    const blobPath = `invoices/regenerated/${path.basename(c.pdfPath)}`;
     const blob = await put(blobPath, pdfBuf, {
       access: "public",
       addRandomSuffix: false,
