@@ -44,6 +44,53 @@ export const PCG_ACCOUNTS: Record<
     classCode: "6",
     nature: "charge",
   },
+  // Capitaux propres
+  "101": {
+    label: "Capital",
+    parentCode: "10",
+    classCode: "1",
+    nature: "passif",
+  },
+  // Tiers — détails (tous les sous-comptes par tiers seront créés à la volée
+  // sous le format {base}-{code}, ex 411-COPA, 401-CASI)
+  "44566": {
+    label: "TVA déductible sur autres biens et services",
+    parentCode: "4456",
+    classCode: "4",
+    nature: "tva",
+  },
+  "44571": {
+    label: "TVA collectée 20%",
+    parentCode: "4457",
+    classCode: "4",
+    nature: "tva",
+  },
+  "44572": {
+    label: "TVA collectée 2,1% (Corse / art. 297 CGI)",
+    parentCode: "4457",
+    classCode: "4",
+    nature: "tva",
+  },
+  "445810": {
+    label: "TVA à reverser / crédit de TVA",
+    parentCode: "4458",
+    classCode: "4",
+    nature: "tva",
+  },
+  // Charges principales
+  "607": {
+    label: "Achats de marchandises",
+    parentCode: "60",
+    classCode: "6",
+    nature: "charge",
+  },
+  // Produits principaux
+  "707": {
+    label: "Ventes de marchandises",
+    parentCode: "70",
+    classCode: "7",
+    nature: "produit",
+  },
 };
 
 // Pour ajouter un cas : étendre ce registre + référencer le compte dans
