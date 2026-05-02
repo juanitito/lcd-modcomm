@@ -68,7 +68,7 @@ export default async function AppLayout({
         <nav className="flex-1 overflow-y-auto px-3 py-4 text-[13px]">
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="mb-4">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-white/45">
+              <div className="px-3 py-1.5 text-[11.5px] font-bold uppercase tracking-[0.1em] text-white">
                 {group.label}
               </div>
               <ul className="space-y-0.5">
