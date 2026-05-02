@@ -12,17 +12,20 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
-  /* Charte "neutral" = slate ardoise */
+  /* Charte "neutral" — palette resserrée vers le foncé pour lisibilité.
+   * Les classes text-neutral-500/600/700 sont les plus utilisées dans
+   * les tableaux, elles doivent être franchement foncées (vs charte
+   * d'origine qui était pâle et bleuâtre). */
   --color-neutral-50: #F5F8FC;
   --color-neutral-100: #E8EEF6;
   --color-neutral-200: #CDD8E8;
-  --color-neutral-300: #B5C3D6;
-  --color-neutral-400: #8FA5C0;
-  --color-neutral-500: #6E87A6;
-  --color-neutral-600: #4E6A8A;
-  --color-neutral-700: #324A6B;
-  --color-neutral-800: #1E3450;
-  --color-neutral-900: #0D1F35;
+  --color-neutral-300: #92A6BF;
+  --color-neutral-400: #5E7591;
+  --color-neutral-500: #3D5470;
+  --color-neutral-600: #1E3450;
+  --color-neutral-700: #15263E;
+  --color-neutral-800: #0D1F35;
+  --color-neutral-900: #07172A;
 
   /* Charte "slate" — alias des mêmes couleurs */
   --color-slate-50: #F5F8FC;
@@ -71,6 +74,13 @@
   .input {
     @apply w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-800 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20 disabled:bg-neutral-100 disabled:text-neutral-400;
   }
+}
+
+/* Police +15% : tout ce qui utilise les tailles rem de Tailwind se met
+ * automatiquement à l'échelle (text-xs, text-sm, text-base, etc.).
+ * 16px (Tailwind/navigateur) × 1.15 = 18.4px de base. */
+html {
+  font-size: 115%;
 }
 
 /* Body : utilise les tokens de la charte */

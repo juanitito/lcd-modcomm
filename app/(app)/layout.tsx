@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth/session";
 
@@ -44,13 +45,22 @@ export default async function AppLayout({
   return (
     <div className="grid min-h-dvh grid-cols-[220px_1fr]">
       <aside className="flex flex-col bg-blue-600 text-white/70">
-        <div className="px-5 py-5 border-b border-white/10">
-          <Link href="/dashboard" className="block">
-            <div className="text-[15px] font-semibold tracking-tight text-white">
-              LCD ModComm
-            </div>
-            <div className="mt-0.5 text-[11px] uppercase tracking-widest text-white/40">
-              Lascia Corre Distribution
+        <div className="border-b border-white/10 px-4 py-4">
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <Image
+              src="/logo.jpg"
+              alt="LCD"
+              width={42}
+              height={42}
+              className="rounded bg-white object-contain p-1"
+            />
+            <div>
+              <div className="text-[15px] font-bold tracking-tight text-white">
+                LCD ModComm
+              </div>
+              <div className="mt-0.5 text-[10px] uppercase tracking-widest text-white/40">
+                Lascia Corre Distribution
+              </div>
             </div>
           </Link>
         </div>
@@ -58,7 +68,7 @@ export default async function AppLayout({
         <nav className="flex-1 overflow-y-auto px-3 py-4 text-[13px]">
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="mb-4">
-              <div className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.1em] text-white/35">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-white/45">
                 {group.label}
               </div>
               <ul className="space-y-0.5">
@@ -66,7 +76,7 @@ export default async function AppLayout({
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className="block rounded px-3 py-1.5 transition hover:bg-white/10 hover:text-white"
+                      className="block rounded px-3 py-1.5 font-bold transition hover:bg-white/10 hover:text-white"
                     >
                       {item.label}
                     </Link>
@@ -81,7 +91,7 @@ export default async function AppLayout({
           <form action="/api/auth/logout" method="POST">
             <button
               type="submit"
-              className="text-[12px] text-white/60 transition hover:text-white"
+              className="text-[12px] font-semibold text-white/60 transition hover:text-white"
             >
               Déconnexion
             </button>
