@@ -12,6 +12,7 @@ import {
   type ClassificationKind,
 } from "@/lib/accounting-kinds";
 import { formatEur } from "@/lib/format";
+import { SplitForm } from "./split-form";
 
 type TxRow = {
   id: string;
@@ -34,7 +35,7 @@ type TxRow = {
   matchNote: string | null;
 };
 
-type InvoiceOption = { id: string; label: string };
+type InvoiceOption = { id: string; label: string; amount: number };
 
 export function TransactionRow({
   tx,
@@ -47,6 +48,7 @@ export function TransactionRow({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [splitMode, setSplitMode] = useState(false);
   const amount = Number(tx.amount);
   const isCredit = amount >= 0;
   const dateLabel = tx.settledAt
@@ -70,6 +72,7 @@ export function TransactionRow({
       : false;
 
   return (
+    <>
     <tr>
       <td className="px-3 py-2 text-xs text-neutral-600 tabular-nums">
         {dateLabel}
@@ -230,10 +233,34 @@ export function TransactionRow({
                 ))}
               </select>
             ) : null}
+            <button
+              type="button"
+              onClick={() => setSplitMode(true)}
+              disabled={isPending}
+              className="text-xs text-neutral-600 underline hover:text-neutral-900 disabled:opacity-50"
+              title="Découper la tx sur plusieurs destinations (factures + classifications)"
+            >
+              Split…
+            </button>
           </div>
         )}
         {error ? <div className="text-xs text-red-600">{error}</div> : null}
       </td>
     </tr>
+    {splitMode && !isTraced ? (
+      <tr>
+        <td colSpan={5} className="px-3 pb-3">
+          <SplitForm
+            txId={tx.id}
+            txAbsAmount={Math.abs(amount)}
+            direction={isCredit ? "credit" : "debit"}
+            invoiceOptions={invoiceOptions}
+            supplierInvoiceOptions={supplierInvoiceOptions}
+            onCancel={() => setSplitMode(false)}
+          />
+        </td>
+      </tr>
+    ) : null}
+    </>
   );
 }

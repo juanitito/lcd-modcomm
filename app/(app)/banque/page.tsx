@@ -137,11 +137,13 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
 
   const invoiceOptionsForUI = invoiceOptions.map((inv) => ({
     id: inv.id,
+    amount: Number(inv.totalTtc),
     label: `${inv.invoiceNumber} — ${inv.clientSnapshot?.name ?? "?"} — ${Number(inv.totalTtc).toFixed(2)}€ — ${inv.issueDate}`,
   }));
 
   const supplierInvoiceOptionsForUI = supplierInvoiceOptions.map((si) => ({
     id: si.id,
+    amount: Number(si.totalTtc),
     label: `${si.supplierInvoiceNumber} — ${si.supplierSnapshot?.name ?? "?"} — ${Number(si.totalTtc).toFixed(2)}€ — ${si.issueDate}`,
   }));
 
