@@ -11,6 +11,7 @@ import {
   writeSupplierInvoiceIssuanceJE,
 } from "@/lib/accounting";
 import { extractInvoice } from "@/lib/invoice-extract";
+import { buildSupplierInvoiceBlobPath } from "@/lib/invoicing";
 
 type Direction = "client" | "supplier";
 
@@ -446,9 +447,60 @@ async function materializeAsSupplierInvoice(
     })
     .where(eq(schema.invoiceImports.id, imp.id));
 
+  // Renomme le PDF au format YYMMDD-LCD-FacFour-{code}.pdf rangé par année.
+  // L'import original sous `invoices/imports/{ts}-{filename}` reste accessible
+  // (audit) mais la facture pointe désormais sur la version renommée.
+  try {
+    await renameSupplierInvoicePdf(created.id, ex.legacyNumber ?? null);
+  } catch (err) {
+    // Pas bloquant : la facture existe, juste le rename a échoué.
+    console.error(`Rename PDF failed for ${created.id}:`, err);
+  }
+
   await writeSupplierInvoiceIssuanceJE(created.id);
 
   return { ok: true };
+}
+
+/**
+ * Télécharge le PDF d'une facture fournisseur depuis Vercel Blob, le réuploade
+ * sous le format YYMMDD-LCD-FacFour-{code}-{numero}.pdf, et met à jour la DB.
+ * Idempotent : si le path est déjà dans le bon format, no-op.
+ */
+async function renameSupplierInvoicePdf(
+  supplierInvoiceId: string,
+  uniquifier: string | null,
+): Promise<void> {
+  const inv = await db.query.supplierInvoices.findFirst({
+    where: eq(schema.supplierInvoices.id, supplierInvoiceId),
+  });
+  if (!inv || !inv.pdfBlobUrl) return;
+  const supplier = await db.query.suppliers.findFirst({
+    where: eq(schema.suppliers.id, inv.supplierId),
+  });
+  if (!supplier) return;
+
+  const newPath = buildSupplierInvoiceBlobPath(
+    inv.issueDate,
+    supplier.code,
+    uniquifier ?? inv.supplierInvoiceNumber,
+  );
+  if (inv.pdfBlobPath === newPath) return; // déjà au bon format
+
+  const r = await fetch(inv.pdfBlobUrl);
+  if (!r.ok) throw new Error(`Lecture PDF Blob: HTTP ${r.status}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+
+  const blob = await put(newPath, buf, {
+    access: "public",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+
+  await db
+    .update(schema.supplierInvoices)
+    .set({ pdfBlobUrl: blob.url, pdfBlobPath: blob.pathname })
+    .where(eq(schema.supplierInvoices.id, supplierInvoiceId));
 }
 
 export async function deleteImport(importId: string) {

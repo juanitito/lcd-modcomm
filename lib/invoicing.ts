@@ -1,4 +1,4 @@
-// Numérotation des factures clients.
+// Numérotation et nomenclature de fichiers — factures clients et fournisseurs.
 // Format : YYYYMMDD-NN (compteur séquentiel à 2 chiffres dans la journée).
 // Choix retenu pour la conformité légale (séquentiel, sans saut, chronologique)
 // tout en restant opaque sur le volume annuel : un client ne voit que la date.
@@ -71,4 +71,65 @@ export function computeChronoNumbers(
     out.set(inv.id, `${key}-${next.toString().padStart(2, "0")}`);
   }
   return out;
+}
+
+// ============================================================================
+// Nomenclature fichiers PDF
+// ============================================================================
+
+/**
+ * Sanitise un nom (client ou fournisseur) pour l'usage dans un nom de fichier.
+ */
+export function sanitizeForFilename(s: string): string {
+  return s
+    .replace(/[\/\\<>:"|?*\x00-\x1f]/g, "")
+    .trim()
+    .slice(0, 80);
+}
+
+/**
+ * Nom de fichier d'une facture client.
+ * Format : YYMMDD-LCD-Facture {client}.pdf
+ * Cas collision (2+ factures même jour même client) : suffixe (N).
+ */
+export function buildClientInvoiceFilename(
+  invoiceNumber: string,
+  clientName: string,
+): string {
+  const [yyyymmdd, nn] = invoiceNumber.split("-");
+  const yymmdd = yyyymmdd.slice(2);
+  const seq = Number.parseInt(nn ?? "1", 10);
+  const safe = sanitizeForFilename(clientName);
+  const base = `${yymmdd}-LCD-Facture ${safe}`;
+  return seq <= 1 ? `${base}.pdf` : `${base} (${seq}).pdf`;
+}
+
+/**
+ * Nom de fichier d'une facture fournisseur.
+ * Format : YYMMDD-LCD-FacFour-{fournisseur}.pdf
+ * Path complet recommandé : factures-achat/YYYY/{filename}.
+ */
+export function buildSupplierInvoiceFilename(
+  issueDate: string, // YYYY-MM-DD
+  supplierCode: string,
+  uniquifier?: string, // ex le numéro de facture fournisseur, pour éviter les collisions
+): string {
+  const [yyyy, mm, dd] = issueDate.split("-");
+  const yymmdd = `${yyyy.slice(2)}${mm}${dd}`;
+  const safe = sanitizeForFilename(supplierCode);
+  const base = `${yymmdd}-LCD-FacFour-${safe}`;
+  return uniquifier ? `${base}-${sanitizeForFilename(uniquifier)}.pdf` : `${base}.pdf`;
+}
+
+/**
+ * Path complet d'une facture fournisseur dans Vercel Blob.
+ */
+export function buildSupplierInvoiceBlobPath(
+  issueDate: string,
+  supplierCode: string,
+  uniquifier?: string,
+): string {
+  const year = issueDate.slice(0, 4);
+  const filename = buildSupplierInvoiceFilename(issueDate, supplierCode, uniquifier);
+  return `factures-achat/${year}/${filename}`;
 }
