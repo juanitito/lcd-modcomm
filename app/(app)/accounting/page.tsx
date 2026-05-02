@@ -35,7 +35,7 @@ const SECTIONS = [
     href: "/accounting/kit",
     title: "Kit expert-comptable",
     desc: "Génération d'un ZIP complet (grand livre + factures + relevés + états) par exercice.",
-    ready: false,
+    ready: true,
   },
 ];
 
