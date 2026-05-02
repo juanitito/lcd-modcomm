@@ -221,51 +221,71 @@ export async function setImportSupplier(input: {
 
 const idSchema = z.string().uuid();
 
-export async function materializeImport(importId: string) {
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
+export async function materializeImport(
+  importId: string,
+): Promise<ActionResult> {
   await requireAuth();
   const id = idSchema.parse(importId);
 
   const imp = await db.query.invoiceImports.findFirst({
     where: eq(schema.invoiceImports.id, id),
   });
-  if (!imp) throw new Error("Import introuvable.");
-  if (!imp.extracted) throw new Error("Pas de données extraites.");
-  if (imp.status === "materialized") throw new Error("Déjà matérialisé.");
+  if (!imp) return { ok: false, error: "Import introuvable." };
+  if (!imp.extracted) return { ok: false, error: "Pas de données extraites." };
+  if (imp.status === "materialized") {
+    return { ok: false, error: "Déjà matérialisé." };
+  }
 
   const ex = imp.extracted;
-  if (!ex.legacyNumber) throw new Error("Numéro de facture héritage manquant.");
-  if (!ex.issueDate) throw new Error("Date d'émission manquante.");
+  if (!ex.legacyNumber) {
+    return { ok: false, error: "Numéro de facture héritage manquant." };
+  }
+  if (!ex.issueDate) {
+    return { ok: false, error: "Date d'émission manquante." };
+  }
   if (!ex.totals?.totalHt || !ex.totals?.totalVat || !ex.totals?.totalTtc) {
-    throw new Error("Totaux incomplets.");
+    return { ok: false, error: "Totaux incomplets." };
   }
 
+  let result: ActionResult;
   if (imp.direction === "client") {
-    if (!imp.matchedClientId) throw new Error("Aucun client matché.");
-    await materializeAsClientInvoice(imp, ex, imp.matchedClientId);
+    if (!imp.matchedClientId) {
+      return { ok: false, error: "Aucun client matché." };
+    }
+    result = await materializeAsClientInvoice(imp, ex, imp.matchedClientId);
   } else {
-    if (!imp.matchedSupplierId) throw new Error("Aucun fournisseur matché.");
-    await materializeAsSupplierInvoice(imp, ex, imp.matchedSupplierId);
+    if (!imp.matchedSupplierId) {
+      return { ok: false, error: "Aucun fournisseur matché." };
+    }
+    result = await materializeAsSupplierInvoice(imp, ex, imp.matchedSupplierId);
   }
+
+  if (!result.ok) return result;
 
   revalidatePath("/invoices/import");
   revalidatePath("/invoices");
+  return { ok: true };
 }
 
 async function materializeAsClientInvoice(
   imp: typeof schema.invoiceImports.$inferSelect,
   ex: NonNullable<typeof schema.invoiceImports.$inferSelect.extracted>,
   clientId: string,
-) {
+): Promise<ActionResult> {
   const client = await db.query.clients.findFirst({
     where: eq(schema.clients.id, clientId),
   });
-  if (!client) throw new Error("Client introuvable.");
+  if (!client) return { ok: false, error: "Client introuvable." };
 
   const invoiceNumber = `LEGACY-${ex.legacyNumber}`;
   const existing = await db.query.invoices.findFirst({
     where: eq(schema.invoices.invoiceNumber, invoiceNumber),
   });
-  if (existing) throw new Error(`Facture ${invoiceNumber} déjà existante.`);
+  if (existing) {
+    return { ok: false, error: `Facture ${invoiceNumber} déjà existante.` };
+  }
 
   const lines = ex.lines ?? [];
   const breakdown = ex.vatBreakdown ?? [];
@@ -332,17 +352,19 @@ async function materializeAsClientInvoice(
       updatedAt: new Date(),
     })
     .where(eq(schema.invoiceImports.id, imp.id));
+
+  return { ok: true };
 }
 
 async function materializeAsSupplierInvoice(
   imp: typeof schema.invoiceImports.$inferSelect,
   ex: NonNullable<typeof schema.invoiceImports.$inferSelect.extracted>,
   supplierId: string,
-) {
+): Promise<ActionResult> {
   const supplier = await db.query.suppliers.findFirst({
     where: eq(schema.suppliers.id, supplierId),
   });
-  if (!supplier) throw new Error("Fournisseur introuvable.");
+  if (!supplier) return { ok: false, error: "Fournisseur introuvable." };
 
   // Pour les fournisseurs : on stocke le numéro tel quel (référence externe).
   // Unique key (supplier_id, supplier_invoice_number) garantit qu'on
@@ -354,10 +376,12 @@ async function materializeAsSupplierInvoice(
         e(si.supplierInvoiceNumber, ex.legacyNumber!),
       ),
   });
-  if (existing)
-    throw new Error(
-      `Facture ${ex.legacyNumber} déjà existante pour ${supplier.name}.`,
-    );
+  if (existing) {
+    return {
+      ok: false,
+      error: `Facture ${ex.legacyNumber} déjà existante pour ${supplier.name}.`,
+    };
+  }
 
   const lines = ex.lines ?? [];
   const breakdown = ex.vatBreakdown ?? [];
@@ -415,6 +439,8 @@ async function materializeAsSupplierInvoice(
       updatedAt: new Date(),
     })
     .where(eq(schema.invoiceImports.id, imp.id));
+
+  return { ok: true };
 }
 
 export async function deleteImport(importId: string) {
