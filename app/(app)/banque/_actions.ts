@@ -272,11 +272,25 @@ export async function clearMatch(txId: string) {
   const id = idSchema.parse(txId);
 
   // Si la transaction était classée (écriture comptable non-facture), on la
-  // débranche aussi et on supprime l'écriture associée.
+  // débranche, on déclasse les factures soldées par le split, et on supprime
+  // l'écriture associée.
   const tx = await db.query.qontoTransactions.findFirst({
     where: eq(schema.qontoTransactions.id, id),
     columns: { journalEntryId: true },
   });
+
+  // Récupérer les factures soldées par les lignes de l'écriture pour les
+  // ré-issuer avant suppression.
+  const linkedInvoices: { invoiceId: string | null; supplierInvoiceId: string | null }[] =
+    tx?.journalEntryId
+      ? await db
+          .select({
+            invoiceId: schema.journalLines.matchedInvoiceId,
+            supplierInvoiceId: schema.journalLines.matchedSupplierInvoiceId,
+          })
+          .from(schema.journalLines)
+          .where(eq(schema.journalLines.entryId, tx.journalEntryId))
+      : [];
 
   await db
     .update(schema.qontoTransactions)
@@ -289,6 +303,21 @@ export async function clearMatch(txId: string) {
       matchNote: null,
     })
     .where(eq(schema.qontoTransactions.id, id));
+
+  for (const link of linkedInvoices) {
+    if (link.invoiceId) {
+      await db
+        .update(schema.invoices)
+        .set({ status: "issued" })
+        .where(eq(schema.invoices.id, link.invoiceId));
+    }
+    if (link.supplierInvoiceId) {
+      await db
+        .update(schema.supplierInvoices)
+        .set({ status: "issued" })
+        .where(eq(schema.supplierInvoices.id, link.supplierInvoiceId));
+    }
+  }
 
   if (tx?.journalEntryId) {
     await deleteJournalEntry(tx.journalEntryId);
