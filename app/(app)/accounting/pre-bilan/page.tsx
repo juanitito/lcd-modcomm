@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { FilterSelect } from "@/components/filter-select";
-import { computeBilan, type BilanLine } from "@/lib/bilan";
+import { computeBilanFormel, type BilanRow } from "@/lib/bilan";
 
 type SP = Promise<{ exercice?: string }>;
 
 const fmt = (n: number) =>
-  `${n.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, " ")} €`;
+  Math.abs(n) < 0.005
+    ? "—"
+    : `${n.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, " ")} €`;
 
 const fmtDate = (iso: string) => {
   const [y, m, d] = iso.split("-");
@@ -16,58 +18,49 @@ function defaultExercice(): string {
   return new Date().getUTCFullYear().toString();
 }
 
-function Block({
-  title,
-  lines,
-  total,
-}: {
-  title: string;
-  lines: BilanLine[];
-  total: number;
-}) {
+function Row({ r }: { r: BilanRow }) {
+  const labelClass =
+    r.level === 0 && r.isHeader
+      ? "text-xs font-bold uppercase tracking-wide text-neutral-700"
+      : r.isGrandTotal
+        ? "text-sm font-bold uppercase"
+        : r.isSubtotal
+          ? "text-sm font-semibold pl-3"
+          : r.level === 1
+            ? "text-sm pl-3 text-neutral-700"
+            : "text-xs pl-6 text-neutral-500";
+  const rowClass = r.isHeader
+    ? "bg-neutral-100"
+    : r.isGrandTotal
+      ? "border-t-2 border-neutral-900 bg-neutral-50"
+      : r.isSubtotal
+        ? "border-t border-neutral-200 bg-neutral-50/50"
+        : "";
   return (
-    <div>
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
-        {title}
-      </h3>
-      <div className="mt-2 space-y-1">
-        {lines.length === 0 ? (
-          <p className="text-xs italic text-neutral-400">Néant</p>
-        ) : (
-          lines.map((l, i) => (
-            <div key={i}>
-              <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="text-neutral-700">
-                  {l.label}
-                  {l.accountCode ? (
-                    <span className="ml-1 font-mono text-[10px] text-neutral-400">
-                      ({l.accountCode})
-                    </span>
-                  ) : null}
-                </span>
-                <span className={`tabular-nums ${l.amount < 0 ? "text-red-700" : ""}`}>
-                  {fmt(l.amount)}
-                </span>
-              </div>
-              {l.detail && l.detail.length > 0 ? (
-                <div className="ml-3 mt-1 space-y-0.5 border-l border-neutral-200 pl-3 text-xs text-neutral-500">
-                  {l.detail.map((d) => (
-                    <div key={d.code} className="flex justify-between gap-3">
-                      <span className="font-mono">{d.code}</span>
-                      <span className="tabular-nums">{fmt(d.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ))
-        )}
-      </div>
-      <div className="mt-3 flex items-baseline justify-between border-t border-neutral-300 pt-2 text-sm font-semibold">
-        <span>Sous-total</span>
-        <span className="tabular-nums">{fmt(total)}</span>
-      </div>
-    </div>
+    <tr className={rowClass}>
+      <td className={`px-3 py-1.5 ${labelClass}`}>
+        {r.label}
+        {r.accountHint && !r.isHeader && !r.isSubtotal && !r.isGrandTotal ? (
+          <span className="ml-2 font-mono text-[10px] text-neutral-400">
+            ({r.accountHint})
+          </span>
+        ) : null}
+      </td>
+      <td
+        className={`px-3 py-1.5 text-right tabular-nums ${
+          r.isGrandTotal ? "text-sm font-bold" : "text-sm"
+        }`}
+      >
+        {r.isHeader ? "" : fmt(r.netN)}
+      </td>
+      <td
+        className={`px-3 py-1.5 text-right tabular-nums text-sm ${
+          r.isGrandTotal ? "font-semibold" : "text-neutral-500"
+        }`}
+      >
+        {r.isHeader ? "" : fmt(r.netN1)}
+      </td>
+    </tr>
   );
 }
 
@@ -78,9 +71,10 @@ export default async function PreBilanPage({
 }) {
   const sp = await searchParams;
   const exercice = sp.exercice ?? defaultExercice();
-  const closing = `${exercice}-12-31`;
+  const exYear = Number.parseInt(exercice, 10);
 
-  const bilan = await computeBilan(closing);
+  const bilan = await computeBilanFormel(exYear);
+  const ecart = bilan.totalActifN - bilan.totalPassifN;
 
   const exerciceOptions = ["2024", "2025", "2026"].map((y) => ({
     value: y,
@@ -98,11 +92,15 @@ export default async function PreBilanPage({
             / Pré-bilan
           </p>
           <h1 className="mt-1 text-2xl font-semibold">
-            Pré-bilan au {fmtDate(closing)}
+            Pré-bilan au {fmtDate(bilan.closingDate)}
           </h1>
-          <div className="mt-2 inline-flex items-center gap-2 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-900">
-            ⚠ <strong>PRÉ-BILAN — document non certifié.</strong> À valider par
-            l'expert-comptable avant tout dépôt.
+          <p className="mt-1 text-sm text-neutral-600">
+            Lascia Corre Distribution — SAS au capital de 1 000 € — SIRET 422
+            310 391 00046
+          </p>
+          <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+            ⚠ <strong>PRÉ-BILAN — document non certifié.</strong> À valider
+            par l'expert-comptable avant tout dépôt légal.
           </div>
         </div>
         <a
@@ -123,70 +121,73 @@ export default async function PreBilanPage({
         />
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <div className="rounded-lg border border-neutral-200 bg-white p-6">
-          <h2 className="text-lg font-semibold">Actif</h2>
-          <div className="mt-4 space-y-6">
-            <Block
-              title="Actif circulant"
-              lines={bilan.actif.circulant}
-              total={bilan.actif.circulant.reduce((s, l) => s + l.amount, 0)}
-            />
-            <Block
-              title="Immobilisations"
-              lines={bilan.actif.immobilisations}
-              total={0}
-            />
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+          <div className="border-b border-neutral-200 bg-neutral-900 px-4 py-2 text-sm font-semibold uppercase tracking-wide text-white">
+            Actif
           </div>
-          <div className="mt-6 flex items-baseline justify-between border-t-2 border-neutral-900 pt-3 text-base font-bold">
-            <span>Total actif</span>
-            <span className="tabular-nums">{fmt(bilan.actif.total)}</span>
-          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-200 bg-neutral-50 text-[10px] uppercase tracking-wide text-neutral-500">
+                <th className="px-3 py-1.5 text-left font-medium">Rubrique</th>
+                <th className="px-3 py-1.5 text-right font-medium">
+                  Net {exYear}
+                </th>
+                <th className="px-3 py-1.5 text-right font-medium">
+                  Net {exYear - 1}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {bilan.actif.map((r, i) => (
+                <Row key={i} r={r} />
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <div className="rounded-lg border border-neutral-200 bg-white p-6">
-          <h2 className="text-lg font-semibold">Passif</h2>
-          <div className="mt-4 space-y-6">
-            <Block
-              title="Capitaux propres"
-              lines={bilan.passif.capitauxPropres}
-              total={bilan.passif.capitauxPropres.reduce(
-                (s, l) => s + l.amount,
-                0,
-              )}
-            />
-            <Block
-              title="Dettes"
-              lines={bilan.passif.dettes}
-              total={bilan.passif.dettes.reduce((s, l) => s + l.amount, 0)}
-            />
+        <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+          <div className="border-b border-neutral-200 bg-neutral-900 px-4 py-2 text-sm font-semibold uppercase tracking-wide text-white">
+            Passif
           </div>
-          <div className="mt-6 flex items-baseline justify-between border-t-2 border-neutral-900 pt-3 text-base font-bold">
-            <span>Total passif</span>
-            <span className="tabular-nums">{fmt(bilan.passif.total)}</span>
-          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-200 bg-neutral-50 text-[10px] uppercase tracking-wide text-neutral-500">
+                <th className="px-3 py-1.5 text-left font-medium">Rubrique</th>
+                <th className="px-3 py-1.5 text-right font-medium">
+                  Net {exYear}
+                </th>
+                <th className="px-3 py-1.5 text-right font-medium">
+                  Net {exYear - 1}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {bilan.passif.map((r, i) => (
+                <Row key={i} r={r} />
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
       <div
         className={`mt-6 rounded-md border px-4 py-3 text-sm ${
-          Math.abs(bilan.ecart) < 0.01
+          Math.abs(ecart) < 0.01
             ? "border-emerald-200 bg-emerald-50 text-emerald-900"
             : "border-amber-200 bg-amber-50 text-amber-900"
         }`}
       >
-        {Math.abs(bilan.ecart) < 0.01 ? (
-          <>✓ Bilan équilibré.</>
+        {Math.abs(ecart) < 0.01 ? (
+          <span>✓ Bilan équilibré (Actif = Passif).</span>
         ) : (
-          <>
+          <span>
             ⚠ Écart Actif − Passif :{" "}
-            <span className="font-semibold tabular-nums">
-              {fmt(bilan.ecart)}
-            </span>
-            . Probable cause : opérations comptables hors du cadre couvert
-            (charges sociales non saisies, immobilisations, etc.). À examiner
-            avec le comptable.
-          </>
+            <span className="font-semibold tabular-nums">{fmt(ecart)}</span>.
+            Causes possibles : charges sociales non saisies, IS non provisionné,
+            écritures d'inventaire manquantes, immobilisations non comptabilisées.
+            À examiner avec l'expert-comptable.
+          </span>
         )}
       </div>
     </div>

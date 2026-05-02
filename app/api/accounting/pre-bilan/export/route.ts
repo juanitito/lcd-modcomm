@@ -1,98 +1,115 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { requireAuth } from "@/lib/auth/session";
-import { computeBilan, type BilanLine } from "@/lib/bilan";
+import { computeBilanFormel, type BilanRow } from "@/lib/bilan";
 
 export const runtime = "nodejs";
 
-function addBlock(
+function addRows(
   ws: ExcelJS.Worksheet,
   startRow: number,
-  title: string,
-  lines: BilanLine[],
+  rows: BilanRow[],
+  exYear: number,
 ): number {
   let row = startRow;
-  ws.getCell(`A${row}`).value = title;
-  ws.getCell(`A${row}`).font = { bold: true };
-  row++;
-  let total = 0;
-  for (const l of lines) {
-    ws.getCell(`A${row}`).value = `  ${l.label}${l.accountCode ? ` (${l.accountCode})` : ""}`;
-    ws.getCell(`B${row}`).value = l.amount;
-    ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
-    total += l.amount;
-    row++;
-    if (l.detail) {
-      for (const d of l.detail) {
-        ws.getCell(`A${row}`).value = `    ${d.code}`;
-        ws.getCell(`A${row}`).font = { color: { argb: "FF6B7280" }, italic: true };
-        ws.getCell(`B${row}`).value = d.amount;
-        ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
-        ws.getCell(`B${row}`).font = { color: { argb: "FF6B7280" }, italic: true };
-        row++;
+  for (const r of rows) {
+    const labelCell = ws.getCell(`A${row}`);
+    const indent =
+      r.level === 0 ? 0 : r.isSubtotal ? 1 : r.level === 1 ? 1 : 2;
+    labelCell.value = `${"  ".repeat(indent)}${r.label}`;
+    if (r.isHeader) {
+      labelCell.font = { bold: true, size: 11 };
+      labelCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE5E7EB" },
+      };
+    } else if (r.isGrandTotal) {
+      labelCell.font = { bold: true, size: 12 };
+      labelCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFD1D5DB" },
+      };
+    } else if (r.isSubtotal) {
+      labelCell.font = { bold: true };
+    }
+    if (!r.isHeader) {
+      const nCell = ws.getCell(`B${row}`);
+      const n1Cell = ws.getCell(`C${row}`);
+      nCell.value = r.netN;
+      n1Cell.value = r.netN1;
+      nCell.numFmt = "#,##0.00 €";
+      n1Cell.numFmt = "#,##0.00 €";
+      if (r.isGrandTotal) {
+        nCell.font = { bold: true, size: 12 };
+        n1Cell.font = { bold: true, size: 12 };
+        nCell.fill = labelCell.fill;
+        n1Cell.fill = labelCell.fill;
+      } else if (r.isSubtotal) {
+        nCell.font = { bold: true };
+        n1Cell.font = { bold: true };
       }
     }
+    row++;
   }
-  ws.getCell(`A${row}`).value = "Sous-total";
-  ws.getCell(`A${row}`).font = { bold: true };
-  ws.getCell(`B${row}`).value = total;
-  ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
-  ws.getCell(`B${row}`).font = { bold: true };
-  return row + 2;
+  return row;
 }
 
 export async function GET(req: NextRequest) {
   await requireAuth();
   const sp = req.nextUrl.searchParams;
-  const exercice =
-    sp.get("exercice") ?? new Date().getUTCFullYear().toString();
-  const closing = `${exercice}-12-31`;
+  const exercice = Number.parseInt(
+    sp.get("exercice") ?? new Date().getUTCFullYear().toString(),
+    10,
+  );
 
-  const bilan = await computeBilan(closing);
+  const bilan = await computeBilanFormel(exercice);
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "LCD Modcomm";
-
   const ws = wb.addWorksheet(`Pré-bilan ${exercice}`);
-  ws.getColumn(1).width = 50;
+  ws.getColumn(1).width = 60;
   ws.getColumn(2).width = 18;
+  ws.getColumn(3).width = 18;
 
-  ws.getCell("A1").value = `PRÉ-BILAN au ${closing} — DOCUMENT NON CERTIFIÉ`;
+  ws.getCell("A1").value = `PRÉ-BILAN au ${bilan.closingDate} — DOCUMENT NON CERTIFIÉ`;
   ws.getCell("A1").font = { size: 14, bold: true, color: { argb: "FF991B1B" } };
-  ws.mergeCells("A1:B1");
+  ws.mergeCells("A1:C1");
+  ws.getCell("A2").value = "Lascia Corre Distribution — SAS au capital de 1 000 € — SIRET 422 310 391 00046 — N° TVA FR25925390254";
+  ws.mergeCells("A2:C2");
+  ws.getCell("A3").value = "Format inspiré du tableau 2050 de la liasse fiscale. À valider par l'expert-comptable.";
+  ws.getCell("A3").font = { italic: true, color: { argb: "FF6B7280" } };
+  ws.mergeCells("A3:C3");
 
-  ws.getCell("A3").value = "Lascia Corre Distribution — SAS au capital de 1 000 €";
-  ws.getCell("A4").value = "SIRET 422 310 391 00046 — N° TVA FR25925390254";
+  // Headers de colonnes
+  let row = 5;
+  ws.getCell(`A${row}`).value = "Rubrique";
+  ws.getCell(`B${row}`).value = `Net ${exercice}`;
+  ws.getCell(`C${row}`).value = `Net ${exercice - 1}`;
+  [`A${row}`, `B${row}`, `C${row}`].forEach((c) => {
+    ws.getCell(c).font = { bold: true };
+    ws.getCell(c).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF1F2937" },
+    };
+    ws.getCell(c).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  });
+  row++;
 
-  let row = 7;
   ws.getCell(`A${row}`).value = "ACTIF";
   ws.getCell(`A${row}`).font = { bold: true, size: 12 };
-  row += 1;
-  row = addBlock(ws, row, "Actif circulant", bilan.actif.circulant);
-  row = addBlock(ws, row, "Immobilisations", bilan.actif.immobilisations);
-  ws.getCell(`A${row}`).value = "TOTAL ACTIF";
-  ws.getCell(`A${row}`).font = { bold: true };
-  ws.getCell(`B${row}`).value = bilan.actif.total;
-  ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
-  ws.getCell(`B${row}`).font = { bold: true };
-  row += 3;
+  ws.mergeCells(`A${row}:C${row}`);
+  row++;
+  row = addRows(ws, row, bilan.actif, exercice);
+  row += 2;
 
   ws.getCell(`A${row}`).value = "PASSIF";
   ws.getCell(`A${row}`).font = { bold: true, size: 12 };
-  row += 1;
-  row = addBlock(ws, row, "Capitaux propres", bilan.passif.capitauxPropres);
-  row = addBlock(ws, row, "Dettes", bilan.passif.dettes);
-  ws.getCell(`A${row}`).value = "TOTAL PASSIF";
-  ws.getCell(`A${row}`).font = { bold: true };
-  ws.getCell(`B${row}`).value = bilan.passif.total;
-  ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
-  ws.getCell(`B${row}`).font = { bold: true };
-  row += 2;
-
-  ws.getCell(`A${row}`).value =
-    Math.abs(bilan.ecart) < 0.01 ? "✓ Bilan équilibré" : "⚠ Écart Actif - Passif";
-  ws.getCell(`B${row}`).value = bilan.ecart;
-  ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
+  ws.mergeCells(`A${row}:C${row}`);
+  row++;
+  row = addRows(ws, row, bilan.passif, exercice);
 
   const buf = await wb.xlsx.writeBuffer();
   return new NextResponse(buf as ArrayBuffer, {
