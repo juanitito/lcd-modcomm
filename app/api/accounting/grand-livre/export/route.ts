@@ -6,16 +6,6 @@ import { requireAuth } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
-// Constantes entreprise (à externaliser dans config/ plus tard si besoin)
-const COMPANY_SIREN = "925390254"; // 9 chiffres du SIRET 422 310 391 00046
-const JOURNAL_LIB: Record<string, string> = {
-  VE: "Ventes",
-  AC: "Achats",
-  BQ: "Banque",
-  CA: "Caisse",
-  OD: "Opérations diverses",
-};
-
 type Row = {
   date: string;
   entryNumber: string;
@@ -102,76 +92,6 @@ export async function GET(req: NextRequest) {
   const baseName = account
     ? `GrandLivre-${exercice}-${account}`
     : `GrandLivre-${exercice}`;
-
-  if (format === "fec") {
-    // FEC — Fichier des Écritures Comptables
-    // Format légal défini par BOI-CF-IOR-60-40-20-30-10
-    // 18 colonnes séparées par | (pipe), encodage UTF-8 + BOM, décimales en virgule
-    // Filename : SIREN_FEC_YYYYMMDD.txt (date de clôture)
-    const fecHeader = [
-      "JournalCode",
-      "JournalLib",
-      "EcritureNum",
-      "EcritureDate",
-      "CompteNum",
-      "CompteLib",
-      "CompAuxNum",
-      "CompAuxLib",
-      "PieceRef",
-      "PieceDate",
-      "EcritureLib",
-      "Debit",
-      "Credit",
-      "EcritureLet",
-      "DateLet",
-      "ValidDate",
-      "Montantdevise",
-      "Idevise",
-    ].join("|");
-
-    const fecLines = [fecHeader];
-    // FEC nécessite un sous-compte tiers : on extrait `{base}-{aux}` quand c'est
-    // un compte auxiliaire (ex 411-COPA). Sinon CompAuxNum/Lib vides.
-    for (const r of rows) {
-      const isAux = /^\d{2,3}-/.test(r.accountCode);
-      const compteNum = isAux ? r.accountCode.split("-")[0] : r.accountCode;
-      const compAuxNum = isAux ? r.accountCode.split("-").slice(1).join("-") : "";
-      const compAuxLib = compAuxNum && r.accountLabel ? r.accountLabel : "";
-      const dateCompact = r.date.replaceAll("-", "");
-      const cells = [
-        r.journal, // JournalCode
-        JOURNAL_LIB[r.journal] ?? r.journal, // JournalLib
-        r.entryNumber, // EcritureNum
-        dateCompact, // EcritureDate
-        compteNum, // CompteNum
-        r.accountLabel || compteNum, // CompteLib
-        compAuxNum, // CompAuxNum
-        compAuxLib, // CompAuxLib
-        r.entryNumber, // PieceRef (= num d'écriture, faute de mieux)
-        dateCompact, // PieceDate
-        r.label, // EcritureLib
-        r.debit > 0 ? r.debit.toFixed(2).replace(".", ",") : "0,00", // Debit
-        r.credit > 0 ? r.credit.toFixed(2).replace(".", ",") : "0,00", // Credit
-        "", // EcritureLet (lettrage non implémenté côté FEC)
-        "", // DateLet
-        dateCompact, // ValidDate
-        "", // Montantdevise (EUR uniquement)
-        "", // Idevise
-      ].map((s) =>
-        // Échappement minimal : remplace pipe et newlines dans les libellés
-        String(s).replace(/[|\r\n]/g, " ").trim(),
-      );
-      fecLines.push(cells.join("|"));
-    }
-    const body = "﻿" + fecLines.join("\r\n");
-    const closing = sp.get("to")?.replaceAll("-", "") ?? "";
-    return new NextResponse(body, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${COMPANY_SIREN}FEC${closing}.txt"`,
-      },
-    });
-  }
 
   if (format === "csv") {
     const header =
