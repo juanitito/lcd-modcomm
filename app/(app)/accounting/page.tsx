@@ -17,7 +17,7 @@ const SECTIONS = [
     href: "/accounting/creances-dettes",
     title: "Créances & dettes",
     desc: "Factures non lettrées au 31/12 — créances clients et dettes fournisseurs.",
-    ready: false,
+    ready: true,
   },
   {
     href: "/accounting/pre-bilan",
