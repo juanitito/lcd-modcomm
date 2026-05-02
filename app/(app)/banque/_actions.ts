@@ -12,6 +12,7 @@ import {
   ensurePcgAccountsExist,
   ensureTierAccount,
   getOrCreatePeriodForDate,
+  isBqAccount,
   nextEntryNumber,
   writeClientInvoicePaymentJE,
   writeSupplierInvoicePaymentJE,
@@ -451,52 +452,110 @@ export async function classifyTransaction(input: {
 
   const txDate = tx.settledAt ?? new Date(tx.date);
   const period = await getOrCreatePeriodForDate(txDate);
-  const entryNumber = await nextEntryNumber(txDate, "BQ");
 
   const counterparty = tx.counterpartyName ?? tx.label ?? "—";
   const label = `${def.label} — ${counterparty}`;
   const dateIso = txDate.toISOString().slice(0, 10);
   const absAmountStr = Math.abs(amount).toFixed(2);
 
-  const [entry] = await db
-    .insert(schema.journalEntries)
-    .values({
-      periodId: period.id,
-      entryNumber,
-      date: dateIso,
-      journal: "BQ",
-      label,
-      status: "draft",
-    })
-    .returning({ id: schema.journalEntries.id });
+  // Si le kind ne touche que des comptes "purs banque" (512, 411, 401, 455, 467,
+  // 4191/4091), on fait une seule écriture BQ. Sinon (charges classe 6, produits
+  // classe 7, etc.), on découple en :
+  //   - écriture OD pour la constatation, transit via 467
+  //   - écriture BQ pour le règlement entre 512 et 467
+  // Le journal BQ ne contient ainsi que des mouvements de trésorerie purs.
+  const needsOdSplit = !isBqAccount(def.debit) || !isBqAccount(def.credit);
 
-  await db.insert(schema.journalLines).values([
-    {
-      entryId: entry.id,
-      accountCode: def.debit,
-      label,
-      debit: absAmountStr,
-      credit: "0.00",
-      position: 0,
-    },
-    {
-      entryId: entry.id,
-      accountCode: def.credit,
-      label,
-      debit: "0.00",
-      credit: absAmountStr,
-      position: 1,
-    },
-  ]);
+  if (!needsOdSplit) {
+    // Cas simple : entrée BQ unique
+    const entryNumber = await nextEntryNumber(txDate, "BQ");
+    const [entry] = await db
+      .insert(schema.journalEntries)
+      .values({
+        periodId: period.id,
+        entryNumber,
+        date: dateIso,
+        journal: "BQ",
+        label,
+        status: "draft",
+      })
+      .returning({ id: schema.journalEntries.id });
+    await db.insert(schema.journalLines).values([
+      { entryId: entry.id, accountCode: def.debit, label, debit: absAmountStr, credit: "0.00", position: 0 },
+      { entryId: entry.id, accountCode: def.credit, label, debit: "0.00", credit: absAmountStr, position: 1 },
+    ]);
+    await db
+      .update(schema.qontoTransactions)
+      .set({
+        journalEntryId: entry.id,
+        matchedAt: new Date(),
+        matchNote: `Classé : ${def.shortLabel} (${def.debit}/${def.credit})`,
+      })
+      .where(eq(schema.qontoTransactions.id, data.txId));
+  } else {
+    // Cas strict : OD constatation + BQ règlement, transit via 467
+    // 1. Crée d'abord l'entrée BQ pour pouvoir y rattacher l'OD
+    const bqNum = await nextEntryNumber(txDate, "BQ");
+    const [bqEntry] = await db
+      .insert(schema.journalEntries)
+      .values({
+        periodId: period.id,
+        entryNumber: bqNum,
+        date: dateIso,
+        journal: "BQ",
+        label: `Règlement : ${label}`,
+        status: "draft",
+      })
+      .returning({ id: schema.journalEntries.id });
 
-  await db
-    .update(schema.qontoTransactions)
-    .set({
-      journalEntryId: entry.id,
-      matchedAt: new Date(),
-      matchNote: `Classé : ${def.shortLabel} (${def.debit}/${def.credit})`,
-    })
-    .where(eq(schema.qontoTransactions.id, data.txId));
+    // 2. BQ : transit via 467
+    const bqDebit = def.side === "credit" ? "512" : "467";
+    const bqCredit = def.side === "credit" ? "467" : "512";
+    await db.insert(schema.journalLines).values([
+      { entryId: bqEntry.id, accountCode: bqDebit, label: `Règlement : ${label}`, debit: absAmountStr, credit: "0.00", position: 0 },
+      { entryId: bqEntry.id, accountCode: bqCredit, label: `Règlement : ${label}`, debit: "0.00", credit: absAmountStr, position: 1 },
+    ]);
+
+    // 3. OD constatation, rattachée à BQ
+    const odNum = await nextEntryNumber(txDate, "OD");
+    const [odEntry] = await db
+      .insert(schema.journalEntries)
+      .values({
+        periodId: period.id,
+        entryNumber: odNum,
+        date: dateIso,
+        journal: "OD",
+        label: `Constatation : ${label}`,
+        parentEntryId: bqEntry.id,
+        status: "draft",
+      })
+      .returning({ id: schema.journalEntries.id });
+
+    // OD : compte produit/charge contre 467
+    // Pour un produit (side credit) : 467 D / 7xxx C
+    // Pour une charge (side debit) : 6xxx D / 467 C
+    if (def.side === "credit") {
+      await db.insert(schema.journalLines).values([
+        { entryId: odEntry.id, accountCode: "467", label: `Constatation : ${label}`, debit: absAmountStr, credit: "0.00", position: 0 },
+        { entryId: odEntry.id, accountCode: def.credit, label: `Constatation : ${label}`, debit: "0.00", credit: absAmountStr, position: 1 },
+      ]);
+    } else {
+      await db.insert(schema.journalLines).values([
+        { entryId: odEntry.id, accountCode: def.debit, label: `Constatation : ${label}`, debit: absAmountStr, credit: "0.00", position: 0 },
+        { entryId: odEntry.id, accountCode: "467", label: `Constatation : ${label}`, debit: "0.00", credit: absAmountStr, position: 1 },
+      ]);
+    }
+
+    // 4. Lie la tx à l'écriture BQ (la "principale" pour les opérations de matching)
+    await db
+      .update(schema.qontoTransactions)
+      .set({
+        journalEntryId: bqEntry.id,
+        matchedAt: new Date(),
+        matchNote: `Classé : ${def.shortLabel} (OD ${odNum} + BQ ${bqNum})`,
+      })
+      .where(eq(schema.qontoTransactions.id, data.txId));
+  }
 
   revalidatePath("/banque");
   return { ok: true };
@@ -689,8 +748,14 @@ export async function splitTransaction(input: {
     };
   }
 
-  // Lignes ventilation (côté opposé à 512) puis ligne 512 récapitulative.
-  const lineRows = lineSpecs.map((spec, i) => ({
+  // Sépare les specs en deux : "tier-pures" (admises en BQ) vs "non-banque"
+  // (charges classe 6 ou produits classe 7) qui doivent passer par OD via 467.
+  const bqLineSpecs = lineSpecs.filter((s) => isBqAccount(s.accountCode));
+  const odLineSpecs = lineSpecs.filter((s) => !isBqAccount(s.accountCode));
+
+  // Lignes BQ : tiers (401-X / 411-X) + transit 467 (somme des spécifs OD) + 512
+  const odTotal = odLineSpecs.reduce((sum, s) => sum + s.amount, 0);
+  const bqLineRows = bqLineSpecs.map((spec, i) => ({
     entryId: entry.id,
     accountCode: spec.accountCode,
     label: spec.label,
@@ -700,17 +765,72 @@ export async function splitTransaction(input: {
     matchedInvoiceId: spec.matchedInvoiceId,
     matchedSupplierInvoiceId: spec.matchedSupplierInvoiceId,
   }));
-  lineRows.push({
+  let pos = bqLineRows.length;
+  if (odTotal > 0.005) {
+    bqLineRows.push({
+      entryId: entry.id,
+      accountCode: "467",
+      label: `Transit OD : ${entryLabel}`,
+      debit: direction === "debit" ? odTotal.toFixed(2) : "0.00",
+      credit: direction === "debit" ? "0.00" : odTotal.toFixed(2),
+      position: pos++,
+      matchedInvoiceId: null,
+      matchedSupplierInvoiceId: null,
+    });
+  }
+  bqLineRows.push({
     entryId: entry.id,
     accountCode: "512",
     label: entryLabel,
     debit: direction === "debit" ? "0.00" : txAbs.toFixed(2),
     credit: direction === "debit" ? txAbs.toFixed(2) : "0.00",
-    position: lineSpecs.length,
+    position: pos,
     matchedInvoiceId: null,
     matchedSupplierInvoiceId: null,
   });
-  await db.insert(schema.journalLines).values(lineRows);
+  await db.insert(schema.journalLines).values(bqLineRows);
+
+  // Si des spécifs OD existent : crée une écriture OD parallèle (rattachée à BQ
+  // par parent_entry_id) qui constate les charges/produits contre 467.
+  if (odLineSpecs.length > 0) {
+    const odNum = await nextEntryNumber(txDate, "OD");
+    const [odEntry] = await db
+      .insert(schema.journalEntries)
+      .values({
+        periodId: period.id,
+        entryNumber: odNum,
+        date: dateIso,
+        journal: "OD",
+        label: `Constatation : ${entryLabel}`,
+        parentEntryId: entry.id,
+        status: "draft",
+      })
+      .returning({ id: schema.journalEntries.id });
+
+    const odLineRows: Array<typeof schema.journalLines.$inferInsert> = [];
+    let oPos = 0;
+    for (const s of odLineSpecs) {
+      // Pour direction debit (charges) : compte de charge D / 467 C
+      // Pour direction credit (produits) : 467 D / compte de produit C
+      odLineRows.push({
+        entryId: odEntry.id,
+        accountCode: s.accountCode,
+        label: s.label,
+        debit: direction === "debit" ? s.amount.toFixed(2) : "0.00",
+        credit: direction === "debit" ? "0.00" : s.amount.toFixed(2),
+        position: oPos++,
+      });
+    }
+    odLineRows.push({
+      entryId: odEntry.id,
+      accountCode: "467",
+      label: `Transit : ${entryLabel}`,
+      debit: direction === "debit" ? "0.00" : odTotal.toFixed(2),
+      credit: direction === "debit" ? odTotal.toFixed(2) : "0.00",
+      position: oPos,
+    });
+    await db.insert(schema.journalLines).values(odLineRows);
+  }
 
   // Lier la tx à l'écriture.
   await db

@@ -443,6 +443,11 @@ export const journalEntries = pgTable("journal_entries", {
   journal: journalCode("journal").notNull(),
   label: text("label").notNull(),
 
+  // Pour le pattern "constatation OD + règlement BQ" : l'entrée OD pointe sur
+  // l'entrée BQ qui la concrétise. Cascade delete : supprimer l'entrée
+  // primaire supprime aussi sa constatation associée.
+  parentEntryId: uuid("parent_entry_id"),
+
   // lien vers le document métier qui a généré l'écriture
   invoiceId: uuid("invoice_id").references(() => invoices.id),
   supplierOrderId: uuid("supplier_order_id").references(() => supplierOrders.id),
