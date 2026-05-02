@@ -103,6 +103,12 @@ export const PCG_ACCOUNTS: Record<
     classCode: "4",
     nature: "tiers",
   },
+  "6242": {
+    label: "Transports sur ventes",
+    parentCode: "624",
+    classCode: "6",
+    nature: "charge",
+  },
 };
 
 // Pour ajouter un cas : étendre ce registre + référencer le compte dans

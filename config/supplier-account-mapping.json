@@ -1,5 +1,6 @@
 {
   "_comment": "Mapping fournisseur (par code) -> compte d'achat principal. Default si absent : 607 (Achats marchandises). À valider avec le comptable.",
   "QONTO": "627",
+  "CAS": "6242",
   "_default": "607"
 }
