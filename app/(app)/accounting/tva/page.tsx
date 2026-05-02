@@ -50,12 +50,21 @@ export default async function TvaPage({
             structure supporte d'autres taux si une facture les contient.
           </p>
         </div>
-        <a
-          href={`/api/accounting/tva/export?exercice=${exercice}&format=xlsx`}
-          className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs hover:border-neutral-500"
-        >
-          Export XLSX (1 feuille / mois)
-        </a>
+        <div className="flex gap-2">
+          <a
+            href={`/api/accounting/tva/export?exercice=${exercice}&format=xlsx`}
+            className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs hover:border-neutral-500"
+          >
+            Export XLSX (ventilation)
+          </a>
+          <a
+            href={`/api/accounting/tva/export?exercice=${exercice}&format=ca3`}
+            className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs text-blue-700 hover:border-blue-500"
+            title="Fichier d'aide au remplissage des CA3 mensuelles sur impots.gouv.fr"
+          >
+            Aide CA3 (exercice)
+          </a>
+        </div>
       </div>
 
       <div className="mt-6 max-w-xs">
