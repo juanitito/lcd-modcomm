@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   setImportClient,
@@ -7,7 +8,7 @@ import {
   materializeImport,
   deleteImport,
   retryExtraction,
-} from "../_actions";
+} from "@/lib/invoice-import-actions";
 import { formatEur } from "@/lib/format";
 
 type ImportRecord = {
@@ -52,8 +53,11 @@ export function ImportRow({
   const isClient = imp.direction === "client";
   const matchedId = isClient ? imp.matchedClientId : imp.matchedSupplierId;
   const options = isClient ? clients : suppliers;
+  const matched = matchedId ? options.find((o) => o.id === matchedId) : null;
   const counterpartyLabel = isClient ? "client" : "fournisseur";
+  const counterpartyBasePath = isClient ? "/clients" : "/suppliers";
 
+  const [editing, setEditing] = useState(false);
   const [selectedId, setSelectedId] = useState(matchedId ?? "");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +69,16 @@ export function ImportRow({
   const canMaterialize =
     imp.status !== "materialized" &&
     imp.status !== "failed" &&
-    !!selectedId &&
+    !!matchedId &&
     !!ex?.legacyNumber &&
     !!ex?.issueDate;
 
   const handleSelect = (newId: string) => {
     setSelectedId(newId);
-    if (!newId || newId === matchedId) return;
+    if (!newId || newId === matchedId) {
+      setEditing(false);
+      return;
+    }
     startTransition(async () => {
       try {
         if (isClient) {
@@ -79,6 +86,7 @@ export function ImportRow({
         } else {
           await setImportSupplier({ importId: imp.id, supplierId: newId });
         }
+        setEditing(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -94,15 +102,6 @@ export function ImportRow({
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[imp.status] ?? "bg-neutral-100 text-neutral-700"}`}
             >
               {imp.status}
-            </span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                isClient
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-purple-50 text-purple-700"
-              }`}
-            >
-              {isClient ? "↗ client" : "↘ fournisseur"}
             </span>
             {ex?.legacyNumber ? (
               <span className="font-mono text-sm">{ex.legacyNumber}</span>
@@ -134,7 +133,7 @@ export function ImportRow({
 
       {ex?.clientGuess?.name || ex?.clientGuess?.siret ? (
         <p className="mt-2 text-xs text-neutral-500">
-          {isClient ? "Client" : "Fournisseur"} détecté :{" "}
+          {isClient ? "Client" : "Fournisseur"} détecté sur le PDF :{" "}
           <span className="text-neutral-700">
             {ex.clientGuess.name ?? "?"}
             {ex.clientGuess.siret ? ` — SIRET ${ex.clientGuess.siret}` : ""}
@@ -143,19 +142,44 @@ export function ImportRow({
       ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <select
-          value={selectedId}
-          onChange={(e) => handleSelect(e.target.value)}
-          disabled={imp.status === "materialized" || isPending}
-          className="input max-w-xs"
-        >
-          <option value="">— matcher un {counterpartyLabel} —</option>
-          {options.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.code} — {c.name}
-            </option>
-          ))}
-        </select>
+        {matched && !editing ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-neutral-500">{counterpartyLabel} :</span>
+            <Link
+              href={`${counterpartyBasePath}/${matched.id}`}
+              className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs hover:border-neutral-400"
+            >
+              <span className="font-mono text-neutral-500">{matched.code}</span>{" "}
+              <span className="text-neutral-800">{matched.name}</span>
+              <span className="ml-1 text-neutral-400">→ éditer</span>
+            </Link>
+            {imp.status !== "materialized" ? (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                disabled={isPending}
+                className="text-xs text-neutral-500 hover:text-neutral-900"
+              >
+                changer
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <select
+            value={selectedId}
+            onChange={(e) => handleSelect(e.target.value)}
+            disabled={imp.status === "materialized" || isPending}
+            className="input max-w-xs"
+            autoFocus={editing}
+          >
+            <option value="">— matcher un {counterpartyLabel} —</option>
+            {options.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.code} — {c.name}
+              </option>
+            ))}
+          </select>
+        )}
 
         <a
           href={imp.pdfBlobUrl}

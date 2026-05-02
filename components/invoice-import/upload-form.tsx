@@ -1,20 +1,21 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { uploadInvoicePdfs } from "../_actions";
+import { uploadInvoicePdfs } from "@/lib/invoice-import-actions";
 
 type Direction = "client" | "supplier";
 
-export function UploadForm() {
+export function UploadForm({ direction }: { direction: Direction }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
-  const [direction, setDirection] = useState<Direction>("client");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const addFiles = (incoming: File[]) => {
-    const pdfs = incoming.filter((f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+    const pdfs = incoming.filter(
+      (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+    );
     if (pdfs.length === 0) {
       setError("Seuls les PDFs sont acceptés.");
       return;
@@ -42,22 +43,6 @@ export function UploadForm() {
 
   return (
     <div className="grid gap-3">
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-neutral-600">Type d&apos;import :</span>
-        <DirectionTab
-          active={direction === "client"}
-          onClick={() => setDirection("client")}
-          label="Factures clients"
-          hint="que tu as émises (créances)"
-        />
-        <DirectionTab
-          active={direction === "supplier"}
-          onClick={() => setDirection("supplier")}
-          label="Factures fournisseurs"
-          hint="que tu as reçues (dettes)"
-        />
-      </div>
-
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
@@ -81,7 +66,10 @@ export function UploadForm() {
           Clique ici pour choisir des PDFs (ou glisse-dépose)
         </div>
         <div className="mt-1 text-xs text-neutral-500">
-          Plusieurs fichiers acceptés. L&apos;extraction LLM prend 5-15s par PDF.
+          {direction === "client"
+            ? "Factures que TU as émises à tes clients."
+            : "Factures que tu as REÇUES de tes fournisseurs."}
+          {" "}L&apos;extraction LLM prend 5-15s par PDF.
         </div>
       </button>
 
@@ -150,34 +138,5 @@ export function UploadForm() {
         </p>
       ) : null}
     </div>
-  );
-}
-
-function DirectionTab({
-  active,
-  onClick,
-  label,
-  hint,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  hint: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-left ${
-        active
-          ? "bg-neutral-900 text-white"
-          : "border border-neutral-300 bg-white hover:border-neutral-500"
-      }`}
-    >
-      <div className="text-xs font-medium">{label}</div>
-      <div className={`text-xs ${active ? "text-neutral-300" : "text-neutral-500"}`}>
-        {hint}
-      </div>
-    </button>
   );
 }
