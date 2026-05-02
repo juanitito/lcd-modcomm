@@ -277,17 +277,43 @@ export async function writeClientInvoiceIssuanceJE(invoiceId: string): Promise<v
   });
   // TVA collectée ventilée par taux
   let pos = 2;
+  let vatLinesTotal = 0;
   for (const b of inv.vatBreakdown ?? []) {
     const rate = Number(b.rate);
     const acct = vatCollectedAccountForRate(rate);
+    const vatAmount = Number(b.vat);
     lines.push({
       entryId: entry.id,
       accountCode: acct,
       label: `${label} — TVA ${rate}%`,
       debit: "0.00",
-      credit: Number(b.vat).toFixed(2),
+      credit: vatAmount.toFixed(2),
       position: pos++,
     });
+    vatLinesTotal += vatAmount;
+  }
+  // Fallback : pas de ventilation TVA mais totalVat > 0 → ligne unique 44571
+  // (taux normal 20% par défaut). Cas des factures legacy dont le breakdown
+  // n'a pas été extrait par l'IA.
+  if ((inv.vatBreakdown?.length ?? 0) === 0 && Number(inv.totalVat) > 0.005) {
+    lines.push({
+      entryId: entry.id,
+      accountCode: "44571",
+      label: `${label} — TVA (fallback 20%)`,
+      debit: "0.00",
+      credit: Number(inv.totalVat).toFixed(2),
+      position: pos++,
+    });
+    vatLinesTotal = Number(inv.totalVat);
+  }
+  // Auto-équilibrage : si HT + Σ VAT lignes ≠ TTC à 0,01€ près (arrondis
+  // d'extraction IA), ajuste la dernière ligne TVA pour balancer exactement.
+  const totalCredit = Number(inv.totalHt) + vatLinesTotal;
+  const ecart = Number(inv.totalTtc) - totalCredit;
+  if (Math.abs(ecart) > 0.005 && Math.abs(ecart) < 0.05 && lines.length > 2) {
+    const lastVatLine = lines[lines.length - 1];
+    const adjusted = Number(lastVatLine.credit) + ecart;
+    lastVatLine.credit = adjusted.toFixed(2);
   }
 
   await db.insert(schema.journalLines).values(lines);
@@ -342,15 +368,18 @@ export async function writeSupplierInvoiceIssuanceJE(
     position: 0,
   });
   let pos = 1;
+  let vatLinesTotal = 0;
   for (const b of inv.vatBreakdown ?? []) {
+    const v = Number(b.vat);
     lines.push({
       entryId: entry.id,
       accountCode: "44566",
       label: `${label} — TVA ${b.rate}%`,
-      debit: Number(b.vat).toFixed(2),
+      debit: v.toFixed(2),
       credit: "0.00",
       position: pos++,
     });
+    vatLinesTotal += v;
   }
   // Si pas de ventilation TVA mais une TVA totale, créer une ligne agrégée
   if ((inv.vatBreakdown?.length ?? 0) === 0 && Number(inv.totalVat) > 0) {
@@ -362,6 +391,15 @@ export async function writeSupplierInvoiceIssuanceJE(
       credit: "0.00",
       position: pos++,
     });
+    vatLinesTotal = Number(inv.totalVat);
+  }
+  // Auto-équilibrage des arrondis (cf. writeClientInvoiceIssuanceJE)
+  const totalDebit = Number(inv.totalHt) + vatLinesTotal;
+  const ecart = Number(inv.totalTtc) - totalDebit;
+  if (Math.abs(ecart) > 0.005 && Math.abs(ecart) < 0.05 && pos > 1) {
+    const lastVatLine = lines[lines.length - 1];
+    const adjusted = Number(lastVatLine.debit) + ecart;
+    lastVatLine.debit = adjusted.toFixed(2);
   }
   // TTC au crédit du tier
   lines.push({
