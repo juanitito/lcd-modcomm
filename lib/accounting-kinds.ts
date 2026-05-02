@@ -38,6 +38,12 @@ export const PCG_ACCOUNTS: Record<
     classCode: "6",
     nature: "charge",
   },
+  "627": {
+    label: "Services bancaires et assimilés",
+    parentCode: "62",
+    classCode: "6",
+    nature: "charge",
+  },
 };
 
 // Pour ajouter un cas : étendre ce registre + référencer le compte dans
@@ -89,6 +95,16 @@ export const CLASSIFICATION_KINDS = {
     shortLabel: "Pénalité fourn.",
     side: "debit",
     debit: "6788",
+    credit: "512",
+  },
+  // Frais bancaires (abonnement Qonto, frais de virement, prélèvements
+  // bancaires sans facture, etc.). À utiliser quand le débit n'a pas de
+  // facture justificative associée.
+  bank_fee: {
+    label: "Frais bancaires",
+    shortLabel: "Frais bancaires",
+    side: "debit",
+    debit: "627",
     credit: "512",
   },
 } as const satisfies Record<
