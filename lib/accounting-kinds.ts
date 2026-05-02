@@ -91,6 +91,12 @@ export const PCG_ACCOUNTS: Record<
     classCode: "7",
     nature: "produit",
   },
+  "7063": {
+    label: "Primes accessoires (parrainage bancaire, etc.)",
+    parentCode: "706",
+    classCode: "7",
+    nature: "produit",
+  },
 };
 
 // Pour ajouter un cas : étendre ce registre + référencer le compte dans
@@ -153,6 +159,15 @@ export const CLASSIFICATION_KINDS = {
     side: "debit",
     debit: "627",
     credit: "512",
+  },
+  // Prime de parrainage bancaire (Qonto et autres). Pas de facture émise par
+  // la banque — c'est un produit accessoire enregistré directement.
+  bank_referral_premium: {
+    label: "Prime de parrainage bancaire",
+    shortLabel: "Prime parrainage",
+    side: "credit",
+    debit: "512",
+    credit: "7063",
   },
 } as const satisfies Record<
   string,
