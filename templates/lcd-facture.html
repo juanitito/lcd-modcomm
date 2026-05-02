@@ -45,7 +45,7 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
 .tot-line{display:flex;justify-content:space-between;padding:5px 0;font-size:9pt;border-bottom:1px solid var(--mid);}
 .tot-line:last-child{border-bottom:none;}
 .tot-label{color:var(--muted);font-size:8pt;text-transform:uppercase;letter-spacing:.5px;}
-.tot-line.grand{background:var(--navy);color:#fff;padding:9px 12px;margin-top:5px;font-family:'Playfair Display',serif;font-size:12pt;font-weight:600;margin-left:-12px;margin-right:-12px;}
+.tot-line.grand{background:var(--navy);color:#fff;padding:9px 12px;margin-top:5px;font-family:'Playfair Display',serif;font-size:12pt;font-weight:600;margin-left:-12px;}
 .tot-line.grand .tot-label{color:rgba(255,255,255,.8);font-size:9pt;}
 .footer-split{display:flex;border-top:2px solid var(--navy);margin-top:auto;}
 .footer-col{flex:1;padding:16px 24px;background:var(--light);border-right:1px solid var(--mid);}
@@ -93,7 +93,7 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
       <div class="party-label">Émetteur</div>
       <div class="party-name">Lascia Corre Distribution</div>
       <div class="party-details">
-        SARL au capital de 1 000 €<br>
+        SAS au capital de 1 000 €<br>
         10, rue de l'Archipel — 20000 Ajaccio<br>
         N° TVA : FR25925390254
       </div>
@@ -134,7 +134,7 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
         {{#each lines}}
         <tr>
           <td><span class="code">{{code}}</span></td>
-          <td><span class="item-name">{{designation}}</span>{{#if conditionnement}}<br><span class="item-sub">{{conditionnement}}</span>{{/if}}</td>
+          <td><span class="item-name">{{designation}}</span></td>
           <td>{{conditionnement}}</td>
           <td class="r">{{qty}}</td><td class="r">{{unitPriceHt}}</td><td class="r">{{vatRate}}</td><td class="r">{{lineTotalHt}}</td>
         </tr>
@@ -145,7 +145,13 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
 
   <div class="totals-wrap">
     <div class="totals-box">
+      {{#if hasDiscount}}
+      <div class="tot-line"><span class="tot-label">Total HT</span><span>{{totalHtBeforeDiscount}}</span></div>
+      <div class="tot-line"><span class="tot-label">Remise {{discountPct}}</span><span>−{{discountAmount}}</span></div>
+      <div class="tot-line"><span class="tot-label">Total HT remisé</span><span>{{totalHt}}</span></div>
+      {{else}}
       <div class="tot-line"><span class="tot-label">Total HT</span><span>{{totalHt}}</span></div>
+      {{/if}}
       {{#each vatBreakdown}}
       <div class="tot-line"><span class="tot-label">TVA {{rate}}</span><span>{{vat}}</span></div>
       {{/each}}
@@ -165,7 +171,7 @@ body{font-family:'Source Sans 3',sans-serif;font-size:10pt;color:#2a2a2a;backgro
     <div class="footer-col">
       <div class="f-label">Mentions légales</div>
       <div class="f-note">
-        Lascia Corre Distribution — SARL au capital de 1 000 €<br>
+        Lascia Corre Distribution — SAS au capital de 1 000 €<br>
         Siège : 10, rue de l'Archipel, 20000 Ajaccio<br>
         SIRET 422 310 391 00046 — RCS Ajaccio 925 390 254<br>
         N° TVA intracommunautaire : FR25925390254<br><br>

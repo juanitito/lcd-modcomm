@@ -260,6 +260,11 @@ export const invoices = pgTable(
     dueDate: date("due_date"),
     paymentTerms: text("payment_terms"),
 
+    // Remise commerciale globale (rate décimal, 0.05 = 5%). 0 = pas de remise.
+    // Quand > 0 : Σ(lignes.lineTotalHt) > totalHt, l'écart est la remise.
+    // Le total HT stocké est toujours le HT *après* remise (base de la TVA).
+    discountRate: numeric("discount_rate", { precision: 5, scale: 4 }).notNull().default("0"),
+
     totalHt: numeric("total_ht", { precision: 14, scale: 2 }).notNull(),
     totalVat: numeric("total_vat", { precision: 14, scale: 2 }).notNull(),
     totalTtc: numeric("total_ttc", { precision: 14, scale: 2 }).notNull(),

@@ -54,6 +54,11 @@ type RenderData = {
   totalHt: string;
   totalTtc: string;
   vatBreakdown: Array<{ rate: string; vat: string }>;
+  // Bloc remise (présent uniquement si hasDiscount=true)
+  hasDiscount: boolean;
+  totalHtBeforeDiscount?: string;
+  discountPct?: string;
+  discountAmount?: string;
 };
 
 function fmtEur(n: number | string): string {
@@ -88,6 +93,23 @@ async function main() {
     orderBy: asc(schema.invoices.issueDate),
   });
   console.log(`${invoices.length} factures à traiter.`);
+
+  // 1bis. Index produits par designation pour reconstruire code + conditionnement.
+  // Les invoiceLines legacy ont code="" et pas de conditionnement (le champ
+  // n'existe d'ailleurs pas en DB). Le catalog products a les deux.
+  const allProducts = await db.query.products.findMany({
+    columns: { code: true, designation: true, conditionnement: true },
+  });
+  const productByDesignation = new Map<
+    string,
+    { code: string; conditionnement: string }
+  >();
+  for (const p of allProducts) {
+    productByDesignation.set(p.designation, {
+      code: p.code,
+      conditionnement: p.conditionnement ?? "",
+    });
+  }
 
   const newNumbers = computeChronoNumbers(
     invoices.map((i) => ({ id: i.id, issueDate: i.issueDate, createdAt: i.createdAt })),
@@ -130,6 +152,27 @@ async function main() {
       // Le snapshot fait foi (état à l'émission) sauf pour le code (pas dans le snapshot)
       const snap = inv.clientSnapshot ?? {};
 
+      // Reconstruction code + conditionnement par lookup catalogue
+      const renderedLines = lines.map((l) => {
+        const prod = productByDesignation.get(l.designation);
+        return {
+          code: l.code || prod?.code || "—",
+          designation: l.designation,
+          conditionnement: prod?.conditionnement ?? "",
+          qty: l.qty.toString().replace(/\.?0+$/, "") || "0",
+          unitPriceHt: fmtEur(l.unitPriceHt),
+          vatRate: fmtVatRate(l.vatRate),
+          lineTotalHt: fmtEur(l.lineTotalHt),
+        };
+      });
+
+      // Bloc remise : si discountRate > 0, on calcule HT-avant + montant remise
+      const discountRate = Number(inv.discountRate ?? 0);
+      const hasDiscount = discountRate > 0.0001;
+      const totalHt = Number(inv.totalHt);
+      const totalHtBeforeDiscount = hasDiscount ? totalHt / (1 - discountRate) : totalHt;
+      const discountAmount = totalHtBeforeDiscount - totalHt;
+
       const data: RenderData = {
         invoiceNumber: newNumber,
         issueDate: fmtDate(inv.issueDate),
@@ -147,21 +190,17 @@ async function main() {
           city: snap.shippingCity,
           zip: snap.shippingZip,
         },
-        lines: lines.map((l) => ({
-          code: l.code,
-          designation: l.designation,
-          conditionnement: "", // l'app ne stocke pas ce champ par ligne aujourd'hui
-          qty: l.qty.toString(),
-          unitPriceHt: fmtEur(l.unitPriceHt),
-          vatRate: fmtVatRate(l.vatRate),
-          lineTotalHt: fmtEur(l.lineTotalHt),
-        })),
-        totalHt: fmtEur(inv.totalHt),
+        lines: renderedLines,
+        totalHt: fmtEur(totalHt),
         totalTtc: fmtEur(inv.totalTtc),
         vatBreakdown: (inv.vatBreakdown ?? []).map((b) => ({
           rate: fmtVatRate(b.rate),
           vat: fmtEur(b.vat),
         })),
+        hasDiscount,
+        totalHtBeforeDiscount: hasDiscount ? fmtEur(totalHtBeforeDiscount) : undefined,
+        discountPct: hasDiscount ? `${(discountRate * 100).toFixed(0)} %` : undefined,
+        discountAmount: hasDiscount ? fmtEur(discountAmount) : undefined,
       };
 
       const html = tpl(data);
