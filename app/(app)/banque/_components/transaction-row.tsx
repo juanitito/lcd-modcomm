@@ -35,7 +35,7 @@ type TxRow = {
   matchNote: string | null;
 };
 
-type InvoiceOption = { id: string; label: string };
+type InvoiceOption = { id: string; label: string; amount: number };
 
 export function TransactionRow({
   tx,

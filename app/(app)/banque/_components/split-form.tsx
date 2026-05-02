@@ -7,7 +7,7 @@ import {
   type ClassificationKind,
 } from "@/lib/accounting-kinds";
 
-type InvoiceOption = { id: string; label: string };
+type InvoiceOption = { id: string; label: string; amount: number };
 
 type SplitTarget =
   | { type: "supplier_invoice"; id: string }
@@ -132,7 +132,22 @@ export function SplitForm({
             <span className="text-neutral-400">€ →</span>
             <select
               value={row.targetEncoded}
-              onChange={(e) => update(i, { targetEncoded: e.target.value })}
+              onChange={(e) => {
+                const enc = e.target.value;
+                const target = decodeTarget(enc);
+                // Auto-remplit le montant quand on choisit une facture (cas
+                // typique : la part du split = le total de la facture).
+                // L'utilisateur reste libre d'ajuster ensuite.
+                let nextAmount = row.amount;
+                if (
+                  target?.type === "supplier_invoice" ||
+                  target?.type === "client_invoice"
+                ) {
+                  const opt = invoiceTargets.find((o) => o.id === target.id);
+                  if (opt) nextAmount = opt.amount.toFixed(2);
+                }
+                update(i, { targetEncoded: enc, amount: nextAmount });
+              }}
               disabled={isPending}
               className="input flex-1 min-w-[20rem]"
             >
