@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth/session";
 import { db, schema } from "@/lib/db";
 import { getOrganization, iterateTransactions, toQontoRow } from "@/lib/qonto";
+import { nameMatchScore } from "@/lib/text-match";
 
 // ---------- Sync ----------
 
@@ -67,27 +68,6 @@ export async function syncQonto(): Promise<{
 }
 
 // ---------- Auto-match income transactions to outgoing invoices ----------
-
-function normalizeTokens(s: string): Set<string> {
-  return new Set(
-    (s ?? "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "") // strip combining diacritics
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((t) => t.length >= 2),
-  );
-}
-
-function tokenOverlap(a: string, b: string): number {
-  const ta = normalizeTokens(a);
-  const tb = normalizeTokens(b);
-  if (ta.size === 0 || tb.size === 0) return 0;
-  let inter = 0;
-  for (const t of ta) if (tb.has(t)) inter++;
-  return inter / Math.min(ta.size, tb.size);
-}
 
 const NAME_MATCH_THRESHOLD = 0.5;
 const NAME_TIE_MARGIN = 0.1;
@@ -166,7 +146,7 @@ export async function autoMatchTransactions(): Promise<{
         })
         .map((inv) => ({
           inv,
-          score: tokenOverlap(inv.clientSnapshot?.name ?? "", counterparty),
+          score: nameMatchScore(inv.clientSnapshot?.name ?? "", counterparty),
         }))
         .sort((a, b) => b.score - a.score);
 
@@ -199,7 +179,7 @@ export async function autoMatchTransactions(): Promise<{
         })
         .map((si) => ({
           si,
-          score: tokenOverlap(si.supplierSnapshot?.name ?? "", counterparty),
+          score: nameMatchScore(si.supplierSnapshot?.name ?? "", counterparty),
         }))
         .sort((a, b) => b.score - a.score);
 
