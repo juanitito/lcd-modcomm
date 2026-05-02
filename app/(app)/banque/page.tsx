@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { and, asc, count, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { FilterSelect } from "@/components/filter-select";
@@ -141,7 +142,13 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
           <h1 className="text-2xl font-semibold">Banque (Qonto)</h1>
           <p className="mt-1 text-sm text-neutral-600">
             {total} opération{total > 1 ? "s" : ""} synchronisées · {totalMatched}{" "}
-            rapprochées · {totalIncome} crédits · {totalExpense} débits.
+            rapprochées · {totalIncome} crédits · {totalExpense} débits.{" "}
+            <Link
+              href="/banque/statements"
+              className="underline hover:text-neutral-900"
+            >
+              Relevés mensuels →
+            </Link>
           </p>
         </div>
         <SyncButtons />

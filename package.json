@@ -16,6 +16,10 @@
     "import:clients": "tsx scripts/import-clients.ts",
     "qonto:dryrun": "tsx scripts/qonto-dryrun.ts",
     "qonto:sync": "tsx scripts/qonto-sync.ts",
+    "qonto:statements": "tsx scripts/import-qonto-statements.ts",
+    "qonto:fees": "tsx scripts/import-qonto-fees.ts",
+    "qonto:resync": "tsx scripts/qonto-resync.ts",
+    "qonto:automatch": "tsx scripts/qonto-auto-match.ts",
     "db:stats": "tsx scripts/db-stats.ts"
   },
   "dependencies": {

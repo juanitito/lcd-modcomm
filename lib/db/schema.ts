@@ -517,7 +517,27 @@ export const invoiceImports = pgTable(
 );
 
 // =====================================================================
-// BANQUE — Qonto
+// BANQUE — Qonto (relevés mensuels)
+// =====================================================================
+
+export const bankStatements = pgTable(
+  "bank_statements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    qontoStatementId: text("qonto_statement_id").notNull().unique(),
+    bankAccountId: text("bank_account_id").notNull(),
+    period: varchar("period", { length: 7 }).notNull(), // MM-YYYY
+    fileName: text("file_name").notNull(),
+    fileSize: integer("file_size").notNull(),
+    pdfBlobUrl: text("pdf_blob_url").notNull(),
+    pdfBlobPath: text("pdf_blob_path").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("bank_statements_period_idx").on(t.bankAccountId, t.period)],
+);
+
+// =====================================================================
+// BANQUE — Qonto (transactions)
 // =====================================================================
 
 export const qontoTransactions = pgTable(

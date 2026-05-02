@@ -100,6 +100,63 @@ export type QontoTransactionsResponse = {
   };
 };
 
+// ---------- Statements ----------
+
+export type QontoStatement = {
+  id: string;
+  bank_account_id: string;
+  period: string; // MM-YYYY
+  file: {
+    file_name: string;
+    file_content_type: string;
+    file_size: string;
+    file_url: string; // expire après 30 min
+  };
+};
+
+export type QontoStatementsResponse = {
+  statements: QontoStatement[];
+  meta: {
+    current_page: number;
+    next_page: number | null;
+    total_count: number;
+    total_pages: number;
+    per_page: number;
+  };
+};
+
+export async function listStatementsPage(opts?: {
+  bankAccountId?: string;
+  page?: number;
+  perPage?: number;
+}): Promise<QontoStatementsResponse> {
+  return qontoFetch<QontoStatementsResponse>("/statements", {
+    "bank_account_ids[]": opts?.bankAccountId,
+    page: opts?.page ?? 1,
+    per_page: opts?.perPage ?? 100,
+    sort_by: "period:desc",
+  });
+}
+
+export async function* iterateStatements(opts?: {
+  bankAccountId?: string;
+}): AsyncGenerator<QontoStatement[], void, void> {
+  let page = 1;
+  while (true) {
+    const r = await listStatementsPage({ ...opts, page });
+    yield r.statements;
+    if (!r.meta.next_page) return;
+    page = r.meta.next_page;
+  }
+}
+
+// Récupère un statement à la demande (l'URL de file expire vite, donc
+// on refetch avant chaque téléchargement).
+export async function getStatement(id: string): Promise<QontoStatement> {
+  const r = await qontoFetch<{ statement: QontoStatement }>(`/statements/${id}`);
+  return r.statement;
+}
+
 // ---------- Attachments ----------
 
 export type QontoAttachment = {
