@@ -22,11 +22,13 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
       ? or(
           isNotNull(schema.qontoTransactions.matchedInvoiceId),
           isNotNull(schema.qontoTransactions.matchedSupplierInvoiceId),
+          isNotNull(schema.qontoTransactions.journalEntryId),
         )
       : matchFilter === "unmatched"
         ? and(
             isNull(schema.qontoTransactions.matchedInvoiceId),
             isNull(schema.qontoTransactions.matchedSupplierInvoiceId),
+            isNull(schema.qontoTransactions.journalEntryId),
           )
         : undefined;
 
@@ -53,6 +55,7 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
         or(
           isNotNull(schema.qontoTransactions.matchedInvoiceId),
           isNotNull(schema.qontoTransactions.matchedSupplierInvoiceId),
+          isNotNull(schema.qontoTransactions.journalEntryId),
         ),
       ),
     db
@@ -77,12 +80,15 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
       qontoCategory: schema.qontoTransactions.qontoCategory,
       matchedInvoiceId: schema.qontoTransactions.matchedInvoiceId,
       matchedSupplierInvoiceId: schema.qontoTransactions.matchedSupplierInvoiceId,
+      journalEntryId: schema.qontoTransactions.journalEntryId,
       matchedAt: schema.qontoTransactions.matchedAt,
       matchNote: schema.qontoTransactions.matchNote,
       matchedInvoiceNumber: schema.invoices.invoiceNumber,
       matchedInvoiceTotal: schema.invoices.totalTtc,
       matchedSupplierInvoiceNumber: schema.supplierInvoices.supplierInvoiceNumber,
       matchedSupplierInvoiceTotal: schema.supplierInvoices.totalTtc,
+      journalEntryNumber: schema.journalEntries.entryNumber,
+      journalEntryLabel: schema.journalEntries.label,
     })
     .from(schema.qontoTransactions)
     .leftJoin(
@@ -95,6 +101,10 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
         schema.qontoTransactions.matchedSupplierInvoiceId,
         schema.supplierInvoices.id,
       ),
+    )
+    .leftJoin(
+      schema.journalEntries,
+      eq(schema.qontoTransactions.journalEntryId, schema.journalEntries.id),
     )
     .where(where)
     .orderBy(desc(schema.qontoTransactions.settledAt))
@@ -218,6 +228,9 @@ export default async function BanquePage({ searchParams }: { searchParams: SP })
                     matchedSupplierInvoiceId: tx.matchedSupplierInvoiceId,
                     matchedSupplierInvoiceNumber: tx.matchedSupplierInvoiceNumber,
                     matchedSupplierInvoiceTotal: tx.matchedSupplierInvoiceTotal,
+                    journalEntryId: tx.journalEntryId,
+                    journalEntryNumber: tx.journalEntryNumber,
+                    journalEntryLabel: tx.journalEntryLabel,
                     matchNote: tx.matchNote,
                   }}
                   invoiceOptions={invoiceOptionsForUI}

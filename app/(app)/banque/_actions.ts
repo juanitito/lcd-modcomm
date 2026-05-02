@@ -5,6 +5,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth/session";
 import { db, schema } from "@/lib/db";
+import {
+  deleteJournalEntry,
+  ensurePcgAccountsExist,
+  getOrCreatePeriodForDate,
+  nextEntryNumber,
+} from "@/lib/accounting";
 import { getOrganization, iterateTransactions, toQontoRow } from "@/lib/qonto";
 import { nameMatchScore } from "@/lib/text-match";
 
@@ -263,16 +269,111 @@ export async function clearMatch(txId: string) {
   await requireAuth();
   const id = idSchema.parse(txId);
 
+  // Si la transaction était classée (écriture comptable non-facture), on la
+  // débranche aussi et on supprime l'écriture associée.
+  const tx = await db.query.qontoTransactions.findFirst({
+    where: eq(schema.qontoTransactions.id, id),
+    columns: { journalEntryId: true },
+  });
+
   await db
     .update(schema.qontoTransactions)
     .set({
       matchedInvoiceId: null,
       matchedSupplierInvoiceId: null,
       matchedSupplierOrderId: null,
+      journalEntryId: null,
       matchedAt: null,
       matchNote: null,
     })
     .where(eq(schema.qontoTransactions.id, id));
 
+  if (tx?.journalEntryId) {
+    await deleteJournalEntry(tx.journalEntryId);
+  }
+
   revalidatePath("/banque");
+}
+
+// ---------- Classification non-facture : avance en compte courant d'associé ----------
+
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
+export async function classifyAsOwnerAdvance(
+  txId: string,
+): Promise<ActionResult> {
+  await requireAuth();
+  const id = idSchema.parse(txId);
+
+  const tx = await db.query.qontoTransactions.findFirst({
+    where: eq(schema.qontoTransactions.id, id),
+  });
+  if (!tx) return { ok: false, error: "Transaction introuvable." };
+  if (tx.matchedInvoiceId || tx.matchedSupplierInvoiceId) {
+    return { ok: false, error: "Transaction déjà rapprochée à une facture." };
+  }
+  if (tx.journalEntryId) {
+    return { ok: false, error: "Transaction déjà classée." };
+  }
+  const amount = Number(tx.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return {
+      ok: false,
+      error: "L'avance en compte courant d'associé doit être un crédit (montant > 0).",
+    };
+  }
+
+  await ensurePcgAccountsExist();
+
+  const txDate = tx.settledAt ?? new Date(tx.date);
+  const period = await getOrCreatePeriodForDate(txDate);
+  const entryNumber = await nextEntryNumber(txDate, "BQ");
+
+  const counterparty = tx.counterpartyName ?? tx.label ?? "—";
+  const label = `Avance compte courant associé — ${counterparty}`;
+  const dateIso = txDate.toISOString().slice(0, 10);
+  const amountStr = amount.toFixed(2);
+
+  const [entry] = await db
+    .insert(schema.journalEntries)
+    .values({
+      periodId: period.id,
+      entryNumber,
+      date: dateIso,
+      journal: "BQ",
+      label,
+      status: "draft",
+    })
+    .returning({ id: schema.journalEntries.id });
+
+  await db.insert(schema.journalLines).values([
+    {
+      entryId: entry.id,
+      accountCode: "512",
+      label,
+      debit: amountStr,
+      credit: "0.00",
+      position: 0,
+    },
+    {
+      entryId: entry.id,
+      accountCode: "455",
+      label,
+      debit: "0.00",
+      credit: amountStr,
+      position: 1,
+    },
+  ]);
+
+  await db
+    .update(schema.qontoTransactions)
+    .set({
+      journalEntryId: entry.id,
+      matchedAt: new Date(),
+      matchNote: "Classé : avance CCA (512/455)",
+    })
+    .where(eq(schema.qontoTransactions.id, id));
+
+  revalidatePath("/banque");
+  return { ok: true };
 }

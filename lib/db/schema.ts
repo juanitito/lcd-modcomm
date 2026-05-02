@@ -558,6 +558,10 @@ export const qontoTransactions = pgTable(
     matchedInvoiceId: uuid("matched_invoice_id").references(() => invoices.id),
     matchedSupplierInvoiceId: uuid("matched_supplier_invoice_id").references(() => supplierInvoices.id),
     matchedSupplierOrderId: uuid("matched_supplier_order_id").references(() => supplierOrders.id),
+    // Classification non-facture : la transaction est tracée par une écriture
+    // comptable (avance assoc., frais bancaires, TVA, etc.) plutôt que par
+    // une facture. La présence de journalEntryId fait foi.
+    journalEntryId: uuid("journal_entry_id").references(() => journalEntries.id),
     matchedAt: timestamp("matched_at", { withTimezone: true }),
     matchNote: text("match_note"),
 
