@@ -29,6 +29,8 @@ data/legacy-excel/*.xlsx
 
 # Output local du script de regénération de factures (Phase 1, dry-run)
 /regenerated-invoices/
+# Legacy PDFs téléchargés depuis Vercel Blob pour comparaison
+/legacy-invoices/
 
 # debug
 npm-debug.log*
