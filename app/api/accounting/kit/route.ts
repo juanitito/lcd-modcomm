@@ -7,7 +7,22 @@ import ExcelJS from "exceljs";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth/session";
 import { db, schema } from "@/lib/db";
-import { computeBilan, computeCompteResultat } from "@/lib/bilan";
+import {
+  computeBilanFormel,
+  computeCompteResultat,
+  computeCompteResultatFormel,
+  type BilanRow,
+  type CompteResultatRow,
+} from "@/lib/bilan";
+
+const COMPANY_SIREN = "925390254";
+const JOURNAL_LIB: Record<string, string> = {
+  VE: "Ventes",
+  AC: "Achats",
+  BQ: "Banque",
+  CA: "Caisse",
+  OD: "Opérations diverses",
+};
 import {
   fetchOpenClientInvoices,
   fetchOpenSupplierInvoices,
@@ -201,104 +216,236 @@ async function buildCreancesDettesXlsx(closing: string): Promise<Buffer> {
   return Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
 }
 
+function addBilanRows(
+  ws: ExcelJS.Worksheet,
+  startRow: number,
+  rows: BilanRow[],
+): number {
+  let row = startRow;
+  for (const r of rows) {
+    const indent = r.level === 0 ? 0 : 1;
+    const labelCell = ws.getCell(`A${row}`);
+    labelCell.value = `${"  ".repeat(indent)}${r.label}`;
+    if (r.isHeader) {
+      labelCell.font = { bold: true, size: 11 };
+      labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+    } else if (r.isGrandTotal) {
+      labelCell.font = { bold: true, size: 12 };
+      labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1D5DB" } };
+    } else if (r.isSubtotal) {
+      labelCell.font = { bold: true };
+    }
+    if (!r.isHeader) {
+      const nCell = ws.getCell(`B${row}`);
+      const n1Cell = ws.getCell(`C${row}`);
+      nCell.value = r.netN;
+      n1Cell.value = r.netN1;
+      nCell.numFmt = "#,##0.00 €";
+      n1Cell.numFmt = "#,##0.00 €";
+      if (r.isGrandTotal) {
+        nCell.font = { bold: true, size: 12 };
+        n1Cell.font = { bold: true, size: 12 };
+        nCell.fill = labelCell.fill;
+        n1Cell.fill = labelCell.fill;
+      } else if (r.isSubtotal) {
+        nCell.font = { bold: true };
+        n1Cell.font = { bold: true };
+      }
+    }
+    row++;
+  }
+  return row;
+}
+
 async function buildPreBilanXlsx(closing: string): Promise<Buffer> {
-  const bilan = await computeBilan(closing);
+  const exercice = Number.parseInt(closing.slice(0, 4), 10);
+  const bilan = await computeBilanFormel(exercice);
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Pré-bilan");
-  ws.getColumn(1).width = 50;
+  const ws = wb.addWorksheet(`Pré-bilan ${exercice}`);
+  ws.getColumn(1).width = 60;
   ws.getColumn(2).width = 18;
+  ws.getColumn(3).width = 18;
   ws.getCell("A1").value = `PRÉ-BILAN au ${closing} — DOCUMENT NON CERTIFIÉ`;
   ws.getCell("A1").font = { size: 14, bold: true, color: { argb: "FF991B1B" } };
-  ws.mergeCells("A1:B1");
+  ws.mergeCells("A1:C1");
+  ws.getCell("A2").value = "Lascia Corre Distribution — SAS au capital de 1 000 € — SIRET 422 310 391 00046";
+  ws.mergeCells("A2:C2");
   let row = 4;
-  const writeBlock = (title: string, lines: { label: string; amount: number; accountCode?: string }[]) => {
-    ws.getCell(`A${row}`).value = title;
-    ws.getCell(`A${row}`).font = { bold: true };
-    row++;
-    let total = 0;
-    for (const l of lines) {
-      ws.getCell(`A${row}`).value = l.label + (l.accountCode ? ` (${l.accountCode})` : "");
-      ws.getCell(`B${row}`).value = l.amount;
-      ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
-      total += l.amount;
-      row++;
-    }
-    ws.getCell(`A${row}`).value = "  Sous-total";
-    ws.getCell(`A${row}`).font = { bold: true };
-    ws.getCell(`B${row}`).value = total;
-    ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
-    ws.getCell(`B${row}`).font = { bold: true };
-    row += 2;
-  };
+  ws.getCell(`A${row}`).value = "Rubrique";
+  ws.getCell(`B${row}`).value = `${exercice}`;
+  ws.getCell(`C${row}`).value = `${exercice - 1}`;
+  [`A${row}`, `B${row}`, `C${row}`].forEach((c) => {
+    ws.getCell(c).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    ws.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F2937" } };
+  });
+  row++;
   ws.getCell(`A${row}`).value = "ACTIF";
   ws.getCell(`A${row}`).font = { bold: true, size: 12 };
+  ws.mergeCells(`A${row}:C${row}`);
   row++;
-  writeBlock("Actif circulant", bilan.actif.circulant);
-  writeBlock("Immobilisations", bilan.actif.immobilisations);
-  ws.getCell(`A${row}`).value = "TOTAL ACTIF";
-  ws.getCell(`A${row}`).font = { bold: true };
-  ws.getCell(`B${row}`).value = bilan.actif.total;
-  ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
-  row += 3;
+  row = addBilanRows(ws, row, bilan.actif);
+  row += 2;
   ws.getCell(`A${row}`).value = "PASSIF";
   ws.getCell(`A${row}`).font = { bold: true, size: 12 };
+  ws.mergeCells(`A${row}:C${row}`);
   row++;
-  writeBlock("Capitaux propres", bilan.passif.capitauxPropres);
-  writeBlock("Dettes", bilan.passif.dettes);
-  ws.getCell(`A${row}`).value = "TOTAL PASSIF";
-  ws.getCell(`A${row}`).font = { bold: true };
-  ws.getCell(`B${row}`).value = bilan.passif.total;
-  ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
+  row = addBilanRows(ws, row, bilan.passif);
   return Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
 }
 
+function addCRRows(
+  ws: ExcelJS.Worksheet,
+  startRow: number,
+  rows: CompteResultatRow[],
+): number {
+  let row = startRow;
+  for (const r of rows) {
+    const indent = r.level === 0 ? 0 : 1;
+    const labelCell = ws.getCell(`A${row}`);
+    labelCell.value = `${"  ".repeat(indent)}${r.label}`;
+    if (r.isHeader) {
+      labelCell.font = { bold: true, size: 11 };
+      labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+    } else if (r.isGrandTotal) {
+      labelCell.font = { bold: true, size: 12 };
+      labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1D5DB" } };
+    } else if (r.isSubtotal) {
+      labelCell.font = { bold: true };
+    }
+    if (!r.isHeader) {
+      const nCell = ws.getCell(`B${row}`);
+      const n1Cell = ws.getCell(`C${row}`);
+      nCell.value = r.amountN;
+      n1Cell.value = r.amountN1;
+      nCell.numFmt = "#,##0.00 €";
+      n1Cell.numFmt = "#,##0.00 €";
+      if (r.isGrandTotal) {
+        nCell.font = { bold: true, size: 12 };
+        n1Cell.font = { bold: true, size: 12 };
+        nCell.fill = labelCell.fill;
+        n1Cell.fill = labelCell.fill;
+      } else if (r.isSubtotal) {
+        nCell.font = { bold: true };
+        n1Cell.font = { bold: true };
+      }
+    }
+    row++;
+  }
+  return row;
+}
+
 async function buildCompteResultatXlsx(year: number): Promise<Buffer> {
-  const cr = await computeCompteResultat(`${year}-01-01`, `${year}-12-31`);
+  const cr = await computeCompteResultatFormel(year);
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Compte de résultat");
-  ws.getColumn(1).width = 14;
-  ws.getColumn(2).width = 50;
-  ws.getColumn(3).width = 16;
-  ws.getCell("A1").value = `COMPTE DE RÉSULTAT — Exercice ${year}`;
-  ws.getCell("A1").font = { size: 14, bold: true };
+  ws.getColumn(1).width = 60;
+  ws.getColumn(2).width = 18;
+  ws.getColumn(3).width = 18;
+  ws.getCell("A1").value = `COMPTE DE RÉSULTAT — Exercice ${year} — DOCUMENT NON CERTIFIÉ`;
+  ws.getCell("A1").font = { size: 14, bold: true, color: { argb: "FF991B1B" } };
   ws.mergeCells("A1:C1");
-  let row = 3;
-  ws.getCell(`A${row}`).value = "CHARGES";
-  ws.getCell(`A${row}`).font = { bold: true };
+  ws.getCell("A2").value = "Lascia Corre Distribution — SAS au capital de 1 000 € — SIRET 422 310 391 00046";
+  ws.mergeCells("A2:C2");
+  let row = 4;
+  ws.getCell(`A${row}`).value = "Rubrique";
+  ws.getCell(`B${row}`).value = `${year}`;
+  ws.getCell(`C${row}`).value = `${year - 1}`;
+  [`A${row}`, `B${row}`, `C${row}`].forEach((c) => {
+    ws.getCell(c).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    ws.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F2937" } };
+  });
   row++;
-  for (const l of cr.chargesLines) {
-    ws.getCell(`A${row}`).value = l.accountCode;
-    ws.getCell(`B${row}`).value = l.label;
-    ws.getCell(`C${row}`).value = l.amount;
-    ws.getCell(`C${row}`).numFmt = "#,##0.00 €";
-    row++;
-  }
-  ws.getCell(`B${row}`).value = "Total charges";
-  ws.getCell(`B${row}`).font = { bold: true };
-  ws.getCell(`C${row}`).value = cr.charges;
-  ws.getCell(`C${row}`).numFmt = "#,##0.00 €";
+  ws.getCell(`A${row}`).value = "CHARGES";
+  ws.getCell(`A${row}`).font = { bold: true, size: 12 };
+  ws.mergeCells(`A${row}:C${row}`);
+  row++;
+  row = addCRRows(ws, row, cr.charges);
   row += 2;
   ws.getCell(`A${row}`).value = "PRODUITS";
-  ws.getCell(`A${row}`).font = { bold: true };
+  ws.getCell(`A${row}`).font = { bold: true, size: 12 };
+  ws.mergeCells(`A${row}:C${row}`);
   row++;
-  for (const l of cr.produitsLines) {
-    ws.getCell(`A${row}`).value = l.accountCode;
-    ws.getCell(`B${row}`).value = l.label;
-    ws.getCell(`C${row}`).value = l.amount;
-    ws.getCell(`C${row}`).numFmt = "#,##0.00 €";
-    row++;
-  }
-  ws.getCell(`B${row}`).value = "Total produits";
-  ws.getCell(`B${row}`).font = { bold: true };
-  ws.getCell(`C${row}`).value = cr.produits;
-  ws.getCell(`C${row}`).numFmt = "#,##0.00 €";
+  row = addCRRows(ws, row, cr.produits);
   row += 2;
-  ws.getCell(`B${row}`).value = cr.resultat >= 0 ? "RÉSULTAT NET (bénéfice)" : "RÉSULTAT NET (perte)";
-  ws.getCell(`B${row}`).font = { bold: true, size: 12 };
-  ws.getCell(`C${row}`).value = cr.resultat;
+  ws.getCell(`A${row}`).value = cr.resultatNetN >= 0 ? "RÉSULTAT NET (BÉNÉFICE)" : "RÉSULTAT NET (PERTE)";
+  ws.getCell(`A${row}`).font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+  ws.getCell(`A${row}`).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: cr.resultatNetN >= 0 ? "FF065F46" : "FF991B1B" },
+  };
+  ws.getCell(`B${row}`).value = cr.resultatNetN;
+  ws.getCell(`B${row}`).numFmt = "#,##0.00 €";
+  ws.getCell(`B${row}`).font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+  ws.getCell(`B${row}`).fill = ws.getCell(`A${row}`).fill;
+  ws.getCell(`C${row}`).value = cr.resultatNetN1;
   ws.getCell(`C${row}`).numFmt = "#,##0.00 €";
-  ws.getCell(`C${row}`).font = { bold: true, size: 12 };
+  ws.getCell(`C${row}`).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  ws.getCell(`C${row}`).fill = ws.getCell(`A${row}`).fill;
   return Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
+}
+
+async function buildFec(year: number): Promise<string> {
+  const fromDate = `${year}-01-01`;
+  const toDate = `${year}-12-31`;
+  const rows = await db
+    .select({
+      date: schema.journalEntries.date,
+      entryNumber: schema.journalEntries.entryNumber,
+      journal: schema.journalEntries.journal,
+      label: schema.journalLines.label,
+      accountCode: schema.journalLines.accountCode,
+      debit: schema.journalLines.debit,
+      credit: schema.journalLines.credit,
+    })
+    .from(schema.journalLines)
+    .innerJoin(
+      schema.journalEntries,
+      eq(schema.journalLines.entryId, schema.journalEntries.id),
+    )
+    .where(and(gte(schema.journalEntries.date, fromDate), lte(schema.journalEntries.date, toDate)))
+    .orderBy(asc(schema.journalEntries.date), asc(schema.journalLines.position));
+
+  const accounts = await db.query.chartOfAccounts.findMany({
+    columns: { code: true, label: true },
+  });
+  const labelByCode = new Map(accounts.map((a) => [a.code, a.label]));
+
+  const header = [
+    "JournalCode", "JournalLib", "EcritureNum", "EcritureDate",
+    "CompteNum", "CompteLib", "CompAuxNum", "CompAuxLib",
+    "PieceRef", "PieceDate", "EcritureLib", "Debit", "Credit",
+    "EcritureLet", "DateLet", "ValidDate", "Montantdevise", "Idevise",
+  ].join("|");
+  const lines = [header];
+  for (const r of rows) {
+    const isAux = /^\d{2,3}-/.test(r.accountCode);
+    const compteNum = isAux ? r.accountCode.split("-")[0] : r.accountCode;
+    const compAuxNum = isAux ? r.accountCode.split("-").slice(1).join("-") : "";
+    const dateCompact = r.date.replaceAll("-", "");
+    const cells = [
+      r.journal,
+      JOURNAL_LIB[r.journal] ?? r.journal,
+      r.entryNumber,
+      dateCompact,
+      compteNum,
+      labelByCode.get(r.accountCode) ?? compteNum,
+      compAuxNum,
+      compAuxNum && labelByCode.get(r.accountCode) ? labelByCode.get(r.accountCode)! : "",
+      r.entryNumber,
+      dateCompact,
+      r.label,
+      Number(r.debit) > 0 ? Number(r.debit).toFixed(2).replace(".", ",") : "0,00",
+      Number(r.credit) > 0 ? Number(r.credit).toFixed(2).replace(".", ",") : "0,00",
+      "",
+      "",
+      dateCompact,
+      "",
+      "",
+    ].map((s) => String(s).replace(/[|\r\n]/g, " ").trim());
+    lines.push(cells.join("|"));
+  }
+  return "﻿" + lines.join("\r\n");
 }
 
 async function buildTvaXlsx(year: number): Promise<Buffer> {
@@ -370,15 +517,14 @@ async function buildReadme(year: number): Promise<string> {
   );
 
   const closing = `${year}-12-31`;
-  const bilan = await computeBilan(closing);
+  const bilan = await computeBilanFormel(year);
   const cr = await computeCompteResultat(fromDate, closing);
   const { yearly: tva } = await computeTvaForYear(year);
   const creances = await fetchOpenClientInvoices(closing);
   const dettes = await fetchOpenSupplierInvoices(closing);
 
-  const tresorerie = bilan.actif.circulant.find(
-    (l) => l.accountCode === "512",
-  )?.amount ?? 0;
+  const tresorerie =
+    bilan.actif.find((r) => r.accountHint === "512, 53")?.netN ?? 0;
 
   const today = new Date();
   const today_fr = `${today.getDate().toString().padStart(2, "0")}/${(today.getMonth() + 1).toString().padStart(2, "0")}/${today.getFullYear()}`;
@@ -397,10 +543,9 @@ Créances ouvertes  : ${creances.length} factures — ${creances.reduce((s, r) =
 Dettes ouvertes    : ${dettes.length} factures — ${dettes.reduce((s, r) => s + r.totalTtc, 0).toFixed(2).replace(".", ",")} € TTC
 Résultat net       : ${cr.resultat.toFixed(2).replace(".", ",")} € (${cr.resultat >= 0 ? "bénéfice" : "perte"})
 
-TVA — Régime Corse (art. 297 CGI) :
-  Collectée 20 %   : ${(tva.collected["20.00"] ?? 0).toFixed(2).replace(".", ",")} €
-  Collectée 2,1 %  : ${(tva.collected["2.10"] ?? 0).toFixed(2).replace(".", ",")} €
-  Déductible total : ${tva.deductibleTotal.toFixed(2).replace(".", ",")} €
+TVA :
+  Collectée totale : ${tva.collectedTotal.toFixed(2).replace(".", ",")} €
+  Déductible totale: ${tva.deductibleTotal.toFixed(2).replace(".", ",")} €
   Net à reverser   : ${tva.net.toFixed(2).replace(".", ",")} €
   Statut           : [À COMPLÉTER — reversée / non reversée / en cours]
 
@@ -412,13 +557,13 @@ Particularités :
 - Pré-bilan et compte de résultat NON CERTIFIÉS — à valider avant dépôt
 
 Contenu du ZIP :
-  1-Grand-Livre/         écritures complètes (CSV + XLSX)
+  1-Grand-Livre/         écritures complètes (CSV + XLSX + FEC légal)
   2-Factures-Vente/      PDFs des factures clients
   3-Factures-Achat/      PDFs des factures fournisseurs
   4-Releves-Bancaires/   relevés mensuels Qonto
-  5-Creances-Dettes/     état au 31/12 (CSV + XLSX)
-  6-Pre-Bilan/           actif/passif au 31/12 (XLSX)
-  7-Compte-Resultat/     charges/produits de l'exercice (XLSX)
+  5-Creances-Dettes/     état au 31/12 (XLSX)
+  6-Pre-Bilan/           bilan formel actif/passif au 31/12, N vs N-1 (XLSX)
+  7-Compte-Resultat/     charges/produits formels, N vs N-1 (XLSX)
   8-TVA/                 ventilation par mois × taux (XLSX)
 `;
 }
@@ -438,9 +583,13 @@ export async function GET(req: NextRequest) {
 
   const zip = new JSZip();
 
-  // 1. Grand livre
+  // 1. Grand livre — CSV + XLSX + FEC légal
   const gl1 = zip.folder("1-Grand-Livre")!;
   gl1.file(`GL-${year}-complet.csv`, await buildGrandLivreCsv(year));
+  gl1.file(
+    `${COMPANY_SIREN}FEC${year}1231.txt`,
+    await buildFec(year),
+  );
   gl1.file(`GL-${year}-complet.xlsx`, await buildGrandLivreXlsx(year));
 
   // 2. Factures vente

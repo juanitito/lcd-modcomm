@@ -44,13 +44,13 @@ export default function KitPage() {
       <div className="mt-6 max-w-2xl text-xs text-neutral-600">
         <h3 className="font-semibold">Contenu du ZIP</h3>
         <ul className="mt-2 list-disc space-y-0.5 pl-5">
-          <li><code>1-Grand-Livre/</code> — CSV + XLSX (avec une feuille par compte)</li>
+          <li><code>1-Grand-Livre/</code> — CSV + XLSX (1 feuille / compte) + <strong>FEC légal</strong> (fichier des écritures comptables, format BOI-CF-IOR-60-40)</li>
           <li><code>2-Factures-Vente/</code> — PDFs renumérotés (YYMMDD-LCD-Facture-X)</li>
           <li><code>3-Factures-Achat/</code> — PDFs renommés (YYMMDD-LCD-FacFour-X)</li>
           <li><code>4-Releves-Bancaires/</code> — relevés Qonto mensuels</li>
           <li><code>5-Creances-Dettes/</code> — état au 31/12</li>
-          <li><code>6-Pre-Bilan/</code> — actif/passif (non certifié)</li>
-          <li><code>7-Compte-Resultat/</code> — charges/produits</li>
+          <li><code>6-Pre-Bilan/</code> — bilan formel actif/passif N vs N-1 (non certifié)</li>
+          <li><code>7-Compte-Resultat/</code> — compte de résultat formel N vs N-1 (non certifié)</li>
           <li><code>8-TVA/</code> — ventilation par mois × taux</li>
           <li><code>README.txt</code> — chiffres-clés générés automatiquement</li>
         </ul>
