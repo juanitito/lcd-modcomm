@@ -20,7 +20,8 @@
     "qonto:fees": "tsx scripts/import-qonto-fees.ts",
     "qonto:resync": "tsx scripts/qonto-resync.ts",
     "qonto:automatch": "tsx scripts/qonto-auto-match.ts",
-    "db:stats": "tsx scripts/db-stats.ts"
+    "db:stats": "tsx scripts/db-stats.ts",
+    "audit:compta": "tsx scripts/audit-compta.ts"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.107",
