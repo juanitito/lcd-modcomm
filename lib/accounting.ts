@@ -54,11 +54,16 @@ export async function nextEntryNumber(
 ): Promise<string> {
   const year = date.getUTCFullYear();
   const prefix = `${year}-${journal}-`;
-  const [{ c }] = await db
-    .select({ c: sql<number>`count(*)::int` })
+  // On prend le max du suffixe numérique (et pas count+1) pour éviter les
+  // collisions quand des écritures ont été supprimées dans la séquence
+  // (clearMatch). Les trous restent visibles, c'est volontaire pour l'audit.
+  const [{ m }] = await db
+    .select({
+      m: sql<number>`COALESCE(MAX(CAST(SUBSTRING(${schema.journalEntries.entryNumber} FROM ${prefix.length + 1}) AS INTEGER)), 0)::int`,
+    })
     .from(schema.journalEntries)
     .where(sql`${schema.journalEntries.entryNumber} LIKE ${prefix + "%"}`);
-  const next = (c ?? 0) + 1;
+  const next = (m ?? 0) + 1;
   return `${prefix}${next.toString().padStart(4, "0")}`;
 }
 

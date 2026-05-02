@@ -581,17 +581,25 @@ export async function splitTransaction(input: {
   const entryLabel = `Split — ${counterparty}`;
   const dateIso = txDate.toISOString().slice(0, 10);
 
-  const [entry] = await db
-    .insert(schema.journalEntries)
-    .values({
-      periodId: period.id,
-      entryNumber,
-      date: dateIso,
-      journal: "BQ",
-      label: entryLabel,
-      status: "draft",
-    })
-    .returning({ id: schema.journalEntries.id });
+  let entry: { id: string };
+  try {
+    [entry] = await db
+      .insert(schema.journalEntries)
+      .values({
+        periodId: period.id,
+        entryNumber,
+        date: dateIso,
+        journal: "BQ",
+        label: entryLabel,
+        status: "draft",
+      })
+      .returning({ id: schema.journalEntries.id });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Création de l'écriture ${entryNumber} : ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
   // Lignes ventilation (côté opposé à 512) puis ligne 512 récapitulative.
   const lineRows = lineSpecs.map((spec, i) => ({
