@@ -595,9 +595,13 @@ export async function splitTransaction(input: {
       })
       .returning({ id: schema.journalEntries.id });
   } catch (err) {
+    // Drizzle wraps DB errors as { message: "Failed query: ...", cause: NeonDbError }
+    // — la cause contient le vrai détail (duplicate key, FK, etc.).
+    const cause = err instanceof Error && err.cause instanceof Error ? err.cause.message : null;
+    const msg = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
-      error: `Création de l'écriture ${entryNumber} : ${err instanceof Error ? err.message : String(err)}`,
+      error: `Création de l'écriture ${entryNumber} : ${cause ?? msg}`,
     };
   }
 
