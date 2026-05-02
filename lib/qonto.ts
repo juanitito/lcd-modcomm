@@ -100,6 +100,27 @@ export type QontoTransactionsResponse = {
   };
 };
 
+// ---------- Attachments ----------
+
+export type QontoAttachment = {
+  id: string;
+  file_name: string;
+  file_size: number;
+  file_content_type: string | null;
+  url: string; // URL S3 signée (TTL court)
+  created_at: string;
+  probative_attachment?: { status: string };
+};
+
+export async function getAttachment(
+  attachmentId: string,
+): Promise<QontoAttachment> {
+  const r = await qontoFetch<{ attachment: QontoAttachment }>(
+    `/attachments/${attachmentId}`,
+  );
+  return r.attachment;
+}
+
 // ---------- API helpers ----------
 
 export async function getOrganization(): Promise<QontoOrganization> {
